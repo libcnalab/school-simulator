@@ -631,7 +631,7 @@ void SchoolGame::UpdateInteractables()
             float yaw;
             RoomId room;
             sim_->Observe(n.id, pos, yaw, room);
-            if (std::fabs(pos.y - feet.Y) > 2.5f || School::DistanceSq(School::Vec2{pos.x, pos.z}, p) > 5.0f * 5.0f) continue;
+            if (std::fabs(pos.y - feet.Y) > 2.5f || School::DistanceSq(School::Vec2{pos.x, pos.z}, p) > 8.0f * 8.0f) continue;
             Interactable it;
             it.box = BoundingBox(Vector3(pos.x - 0.25f, pos.y + 0.2f, pos.z - 0.25f), Vector3(pos.x + 0.25f, pos.y + 1.75f, pos.z + 0.25f));
             std::string who = n.name + ", " + School::RoleName(n.role);
@@ -818,7 +818,7 @@ void SchoolGame::Update(GameTime& gameTime)
             UpdateInteractables();
         }
         const std::optional<float> wall = collision_->Raycast(camera_.ViewRay(), 4.0f, player_->Level());
-        interaction_.Focus(camera_.ViewRay(), 3.2f, wall.value_or(1e9f));
+        interaction_.Focus(camera_.ViewRay(), 6.0f, wall.value_or(1e9f));
         focusPrompt_ = interaction_.FocusedPrompt();
         if (!bigMap_ && (input_.Pressed(Keys::E) || input_.LeftClicked() || input_.PadPressed(&GamePadButtons::getAProperty))) {
             if (interaction_.Activate()) {
@@ -1210,7 +1210,7 @@ void SchoolGame::RunScript()
         } else if (op == "e") {
             UpdateInteractables();
             const std::optional<float> wall = collision_->Raycast(camera_.ViewRay(), 4.0f, player_->Level());
-            interaction_.Focus(camera_.ViewRay(), 3.2f, wall.value_or(1e9f));
+            interaction_.Focus(camera_.ViewRay(), 6.0f, wall.value_or(1e9f));
             const std::string prompt = interaction_.FocusedPrompt();
             const bool used = interaction_.Activate();
             School::Log("script", "e: %s", used ? prompt.c_str() : "nothing under the crosshair");
