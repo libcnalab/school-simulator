@@ -1,6 +1,6 @@
 # Performance notes
 
-Everything here was measured on the build host (no GPU, Mesa llvmpipe software OpenGL, a shared machine with a
+Everything here was measured on the build host (headless: Mesa llvmpipe software OpenGL, the iGPU unused, a shared machine with a
 load average around 12), so frame rates say nothing about hardware; the simulation numbers do.
 
 ## Simulation (headless, `school-sim-cli`)

@@ -24,10 +24,10 @@ Working notes for whoever continues (human or agent). Dates are when something w
   and alighting at full fidelity, timed rides for abstract walkers, the player can ride (call button, cab
   buttons). Riders are the people who prefer the lift (`Npc::usesElevator`: 6 % of students, half the teachers,
   most staff); they route through `NavGraph(plan, true)`; fire drills never use the lift.
-- Verified only on the OPENGLES3 renderer (Mesa llvmpipe under Xvfb, no GPU on the build machine). A
+- Verified only on the OPENGLES3 renderer (Mesa llvmpipe under Xvfb: headless runs here never touch the machine's GPU). A
   multi-renderer tree (OPENGLES3, OPENGL33, SOFTWARE) is the next thing to build and run; results go to
   `docs/RENDERER_TESTING.md`.
-- Nothing has been run on a real GPU, with real audio, or with a gamepad.
+- The host does have an AMD Phoenix1 iGPU and HD-Audio hardware (the owner's GNOME/Wayland session, Xwayland on :0), but every run recorded here was headless (Xvfb + llvmpipe + dummy audio). Nothing has been measured on the GPU, heard through real audio, or tried with a gamepad.
 
 ## Build, run, test
 
@@ -81,9 +81,10 @@ Project rules from `../CLAUDE.md` apply: one shared ccache (`CCACHE_DIR=/rv/cnac
 
 ## What is next (priority order)
 
-1. **Other renderers**: FNA3D, WEBGPU, SDL_GPU (museum-simulator's `docs/RENDERER_TESTING.md` has the build
-   recipe); the three built here (OPENGLES3, OPENGL33, SOFTWARE) pass the tour.
-2. **Performance on a GPU**: nothing has been measured on hardware. Corridor segments could be merged per wing,
+1. **Renderers on the real GPU**: all six built renderers (OPENGLES3, OPENGL33, SOFTWARE, FNA3D, WEBGPU, SDL_GPU) pass
+   the tour headless (2026-10-14, recipe in `docs/RENDERER_TESTING.md`); none has run on the AMD iGPU (needs the
+   owner's desktop session, DISPLAY=:0 / Wayland).
+2. **Performance on a GPU**: nothing has been measured on the GPU (the headless runs use llvmpipe). Corridor segments could be merged per wing,
    far rooms could share a simplified mesh, people beyond 110 m are not drawn at all.
 3. **Signs**: wing names at corridor ends, "you are here" boards by the staircases (the door plates and the
    lobby signage show how: `Screens::PlateFor`, `Screens::RenderSignage`).

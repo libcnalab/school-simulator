@@ -6,10 +6,10 @@
   triangles all carry the same texture coordinate comes out black with `SamplerState::AnisotropicWrap`.
   The school gives every face real UVs, so nothing in the app shows it; a CNA-side check (LOD clamp or
   anisotropic fallback) is still worth doing. Found 2026-10-14.
-- FNA3D, WEBGPU, SDL_GPU and DIRECTX9 have not been run (`docs/RENDERER_TESTING.md`).
+- FNA3D, WEBGPU and SDL_GPU pass the tour (on the CPU, lavapipe); none of the renderers has run on the AMD iGPU, and DIRECTX9 has not been run (`docs/RENDERER_TESTING.md`).
 - Elevator: abstract riders inside a shaft are not drawn (they would float at the wrong height); the cab has
   no inner door and no arrival chime; a cab that is full keeps people waiting up to 60 s, then they board anyway.
-- Frame rate on the build host is 10-25 fps because it has no GPU (llvmpipe); not measured on hardware.
+- Frame rate on the build host is 10-25 fps because headless runs use Mesa llvmpipe (software GL under Xvfb); the host's AMD iGPU has not been measured.
 - Extreme population: 21 late arrivals per day (people whose seat overflowed walk further); fine, but the
   overflow spots are rings around a seat, not extra desks.
 - Corridors are drawn one mesh per 18 m segment with about six draw calls each; a wing-level merge would

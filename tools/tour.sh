@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Visits the school's key places headlessly and saves a screenshot of each to build/shots/.
 #
-#   tools/tour.sh [-r RENDERER] [-p PRESET] [-o OUTDIR]
+#   tools/tour.sh [-r RENDERER] [-p PRESET] [-o OUTDIR]      (BUILD_DIR selects the tree, default build)
 #
 # Needs xvfb-run. Exit status 1 if any run failed or any draw error was logged. Each stop is one process so a
 # problem in one place never hides the others; the log of every run is kept next to its picture.
@@ -9,7 +9,8 @@ set -u
 cd "$(dirname "$0")/.." || exit 2
 renderer=${SCHOOL_RENDERER:-}
 preset=normal
-out=build/shots
+build_dir=${BUILD_DIR:-build}
+out=$build_dir/shots
 while getopts "r:p:o:" opt; do
   case $opt in
     r) renderer=$OPTARG ;;
@@ -18,8 +19,8 @@ while getopts "r:p:o:" opt; do
     *) echo "usage: $0 [-r RENDERER] [-p PRESET] [-o OUTDIR]"; exit 2 ;;
   esac
 done
-bin=build/bin/cna-school-simulator
-[ -x "$bin" ] || { echo "build first: tools/build.sh"; exit 2; }
+bin=$build_dir/bin/cna-school-simulator
+[ -x "$bin" ] || { echo "build first: BUILD_DIR=$build_dir tools/build.sh"; exit 2; }
 mkdir -p "$out"
 export SDL_AUDIODRIVER=dummy
 env_renderer=()
