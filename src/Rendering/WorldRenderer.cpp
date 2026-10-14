@@ -10,6 +10,7 @@
 #include "Microsoft/Xna/Framework/Graphics/PrimitiveType.hpp"
 #include "Microsoft/Xna/Framework/Graphics/DepthStencilState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RasterizerState.hpp"
+#include "Microsoft/Xna/Framework/Graphics/SamplerState.hpp"
 #include "Microsoft/Xna/Framework/MathHelper.hpp"
 #include "Rendering/EffectBank.hpp"
 #include "Rendering/LitMesh.hpp"
@@ -67,14 +68,14 @@ void WorldRenderer::DrawLamps(const DrawContext& ctx, const WorldLighting& light
     };
     const auto tone = [&](float f) { return static_cast<int>(std::clamp(f * night, 0.0f, 1.0f) * 255.0f); };
     const Color glow(tone(1.0f), tone(0.85f), tone(0.55f), 255);
-    const Color pool(tone(0.45f), tone(0.4f), tone(0.25f), 255);
+    const Color pool(tone(0.6f), tone(0.52f), tone(0.3f), 255);
     int drawn = 0;
     for (const Lamp& l : lamps_) {
         if (Vector3::DistanceSquared(l.head, ctx.view.eye) > 120.0f * 120.0f) continue;
         if (!ctx.view.frustum.Intersects(BoundingSphere(Vector3(l.head.X, l.groundY + 2.0f, l.head.Z), 6.0f))) continue;
-        const Vector3 r = right * 0.9f, u = up * 0.9f;
+        const Vector3 r = right * 1.7f, u = up * 1.7f;
         quad(l.head - r + u, l.head + r + u, l.head + r - u, l.head - r - u, glow);
-        const float R = 5.0f;
+        const float R = 6.5f;
         const Vector3 g(l.head.X, l.groundY + 0.03f, l.head.Z);
         quad(g + Vector3(-R, 0, -R), g + Vector3(R, 0, -R), g + Vector3(R, 0, R), g + Vector3(-R, 0, R), pool);
         ++drawn;
@@ -84,6 +85,7 @@ void WorldRenderer::DrawLamps(const DrawContext& ctx, const WorldLighting& light
     device.setBlendStateProperty(BlendState::Additive);
     device.setDepthStencilStateProperty(DepthStencilState::DepthRead);
     device.setRasterizerStateProperty(RasterizerState::CullNone);
+    device.getSamplerStatesProperty()[0] = SamplerState::LinearClamp;
     BasicEffect& fx = ctx.fx.World();
     fx.setWorldProperty(Matrix::getIdentityProperty());
     fx.setDiffuseColorProperty(Vector3(1, 1, 1));

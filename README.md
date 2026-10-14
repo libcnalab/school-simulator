@@ -27,7 +27,7 @@ scheduling experiment.
 | Rooms | 40 room types, each with its own furniture and the places people occupy: desks and chairs, lab benches, computer desks with monitors, easels, a piano, shelves full of books, theatre seats, a stage, serving counter and queue lanes, lockers, server racks, beds, hoops and scoreboards |
 | People | students in classes with a weekly timetable, teachers, reception, admin, nurse, counsellor, IT, security, cooks, librarians, janitors; population presets from empty to extreme (2400 students) |
 | Simulation | event-driven at three fidelity levels (abstract / reduced / full), hierarchical navigation (room graph plus waypoints, aisles inside rooms, stairs, elevator rides for those who prefer the lift), door gates with throughput, elevator cabs with calls, capacity and boarding, lane walking, local separation, stuck detection, lunch waves, after-school clubs, patrols, fire drills with assembly points; deterministic from a seed |
-| Rendering | room interiors built lazily around the player, facade and roofs, animated door leaves and elevator cabs, box-figure people with poses and a walk cycle, day and night sky, fog, rain and snow, CCTV wall rendered into render targets, digital signage, whiteboards showing the lesson in progress, room code plates at every door, diagnostics monitors in the server room, animated demonstrations in the labs, workshops and gym |
+| Rendering | room interiors built lazily around the player, facade and roofs, animated door leaves and elevator cabs, box-figure people with poses and a walk cycle, day and night sky with lamp posts glowing at night and room lights that follow occupancy, fog, rain and snow, CCTV wall rendered into render targets, digital signage, whiteboards showing the lesson in progress, room code plates at every door, diagnostics monitors in the server room, animated demonstrations in the labs, workshops and gym |
 | Audio | bells, alarm, doors, footsteps, room ambiences that follow occupancy, corridor chatter that follows the crowd around you, PA announcements, rain |
 | UI | clock and phase, room banners with the lesson and teacher, prompts, toasts, minimap and full campus map, F3 statistics, F4 debug overlays (paths and fidelity, bounds and navigation nodes, collision boxes) |
 | Testing | 150 000+ checks in `school_tests` (plan, navigation, elevators, timetable, schedule, layouts, determinism, full vs abstract agreement, drills, six-day soak), 3.4 million in `school_app_tests` (geometry of every room, collision at every door), CTest days at normal and extreme population, a headless screenshot tour on three renderers |
@@ -47,7 +47,7 @@ SCHOOL_RENDERERS="OPENGLES3;OPENGL33;SOFTWARE" RECONFIGURE=1 tools/build.sh   # 
 ## Run
 
 ```bash
-build/bin/cna-school-simulator                       # the front plaza at 07:50 on a Monday, normal population
+build/bin/cna-school-simulator                       # the front plaza at 07:50 on a Monday, busy population (1000 students)
 build/bin/cna-school-simulator --preset busy --time 08:44 --room N1.05
 build/bin/cna-school-simulator --weather rain --speed 5
 build/bin/cna-school-simulator --help

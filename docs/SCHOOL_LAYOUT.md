@@ -39,7 +39,7 @@ Courtyard inside the ring; front plaza south of the lobby with the car park and 
 and west yards; the playground west of the sports block; lawns; the running track and football field north
 of the building with five assembly points on its south edge; four more assembly points on the west and east
 yards; the street (off campus) south of the car park with three gates. Every outdoor zone touching another is
-joined by openings; buildings have external doors from the lobby, the stair towers, the gym, changing rooms,
+joined by openings; lamp posts stand along the edges of the paved zones; buildings have external doors from the lobby, the stair towers, the gym, changing rooms,
 workshops, kitchen, library, auditorium, music hall and drama studio.
 
 ## Doors
