@@ -9,6 +9,16 @@ The player walks through it in first person while the school day runs at any spe
 same time a CNA 3D showcase, an integration and stress test, and a large-scale NPC / pathfinding /
 scheduling experiment.
 
+## Pictures
+
+| | | |
+|---|---|---|
+| ![Entrance](docs/images/entrance.jpg) The main entrance at 07:55 | ![Classroom](docs/images/classroom.jpg) A lesson in progress | ![Corridor](docs/images/corridor.jpg) A corridor between lessons |
+| ![Cafeteria](docs/images/cafeteria.jpg) Lunch, first wave | ![Physics lab](docs/images/physics-lab.jpg) Physics: pendulum and board | ![Computer lab](docs/images/computer-lab.jpg) Computer lab with live desktops |
+| ![CCTV](docs/images/cctv.jpg) The security office's CCTV wall | ![Library](docs/images/library.jpg) The library | ![Gym](docs/images/gym.jpg) The gymnasium |
+| ![Auditorium](docs/images/auditorium.jpg) The auditorium | ![Fire drill](docs/images/fire-drill.jpg) Fire drill: walking to the assembly points | ![Rain](docs/images/rain.jpg) Rain in the courtyard |
+| ![Map](docs/images/campus-map.jpg) The campus map | ![Stairs](docs/images/stairs.jpg) A stairwell at the bell | ![Night](docs/images/night.jpg) The entrance at night |
+
 ## What is there
 
 | Area | Highlights |

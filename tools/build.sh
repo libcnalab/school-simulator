@@ -58,5 +58,13 @@ else
   grep -E "error:|FAILED:|undefined reference|CMake Error|^(\.\./)*src/[^ ]*: warning:|^(\.\./)*tests/[^ ]*: warning:" \
     -A3 "$build_dir/build.log" | grep -v "^--$" | cut -c1-260 | head -"${LINES_MAX:-60}"
 fi
-if [ $status -eq 0 ]; then echo "build ok"; else echo "build FAILED (log: $build_dir/build.log)"; fi
+if [ $status -eq 0 ]; then
+  echo "build ok"
+else
+  echo "build FAILED (log: $build_dir/build.log)"
+  # CNA is edited by other agents while we build against it; its configure-time audits fail for a minute now and then.
+  if grep -q "audit failed\|Configuring incomplete" "$build_dir/build.log" "$build_dir/configure.log" 2>/dev/null; then
+    echo "note: CNA's own configure step failed (its checkout is probably mid-edit by someone else); wait a minute and run this again"
+  fi
+fi
 exit $status
