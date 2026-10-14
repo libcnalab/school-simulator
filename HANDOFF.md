@@ -12,8 +12,13 @@ Working notes for whoever continues (human or agent). Dates are when something w
   draw errors. A one-day soak at x30 with the busy preset: resident memory 279 -> 302 MB over 3.5 school hours,
   flat afterwards (navigation trees and door plates filling up).
 - Later on 2026-10-14: default preset is busy (1000 students); lamp posts glow at night and room lights follow
-  occupancy; door plates, wing signs, floor indicators, computer-lab desktops, diagnostics monitors, art still
-  life, locker visits on arrival, people sitting on benches. `tools/soak.sh -p extreme -n 6`: memory flat at
+  occupancy (light switches beside the doors override them); door plates, wing signs, floor indicators,
+  computer-lab desktops, diagnostics monitors, art still life, locker and toilet visits, people sitting on
+  benches, trophy cabinets, elevator chime, F12 screenshots.
+- **Wayland** (reported by the owner 2026-10-14): CNA refused to start because it could not centre the window.
+  Fixed in the CNA working tree (`Sdl3Window::CenterOnDisplay` is best-effort) but NOT committed there: that
+  function is another agent's uncommitted work. If the fix is lost, re-apply it or run under XWayland
+  (`SDL_VIDEO_DRIVER=x11`). `tools/soak.sh -p extreme -n 6`: memory flat at
   307 MB, nobody stuck. `tools/determinism.sh` passes.
 - Elevators (2026-10-14): two shafts (east and west wings, levels 1-4) with cabs, calls, capacity 8, boarding
   and alighting at full fidelity, timed rides for abstract walkers, the player can ride (call button, cab
@@ -58,6 +63,11 @@ Project rules from `../CLAUDE.md` apply: one shared ccache (`CCACHE_DIR=/rv/cnac
 | Sounds | `src/Audio/SchoolAudio.cpp` |
 
 ## Gotchas learned the hard way
+
+- The `look:` script op is absolute (yaw 0 = north); `turn:` and `pitch:` are relative to the current view.
+  `goto:` and `busiest:` face into the room, `atdoor:` faces the door from two metres outside.
+- CNA's configure-time audits fail for a minute now and then while another agent edits `../cna`; `tools/build.sh`
+  says so. Wait and retry; never "fix" it by touching CNA's audit files.
 
 - A textured BasicEffect draw whose triangles have a constant texture coordinate renders **black** on EasyGL
   (zero derivatives with anisotropic sampling). Give every face real UVs even on a white texture.
