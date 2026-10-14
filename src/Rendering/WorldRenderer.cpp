@@ -110,6 +110,11 @@ float WorldRenderer::DistanceTo(const Room& room, const Vector3& eye) const
 
 void WorldRenderer::Update(const Vector3& eye, int level, float dt)
 {
+    Update(eye, level, dt, {});
+}
+
+void WorldRenderer::Update(const Vector3& eye, int level, float dt, const std::vector<Anchor>& anchors)
+{
     lastEye_ = eye;
     lastLevel_ = level;
     sinceScan_ += dt;
@@ -130,7 +135,19 @@ void WorldRenderer::Update(const Vector3& eye, int level, float dt)
             else if (dl == 0) radius = loadRadius;
             else if (dl == 1) radius = adjacentLevelRadius;
             else radius = 0.0f;
-            if (d < radius) wanted.push_back({d + static_cast<float>(dl) * 20.0f, r.id});
+            if (d < radius) {
+                wanted.push_back({d + static_cast<float>(dl) * 20.0f, r.id});
+                continue;
+            }
+            // Secondary anchors (CCTV cameras): a small bubble of rooms around each.
+            for (const Anchor& a : anchors) {
+                if (r.level > a.level || r.TopLevel() < a.level) continue;
+                const float da = DistanceTo(r, a.position);
+                if (da < a.radius) {
+                    wanted.push_back({200.0f + da, r.id});
+                    break;
+                }
+            }
         }
         std::sort(wanted.begin(), wanted.end(), [](const Want& a, const Want& b) { return a.score < b.score; });
         if (static_cast<int>(wanted.size()) > maxLoaded) wanted.resize(static_cast<std::size_t>(maxLoaded));
@@ -276,9 +293,13 @@ void WorldRenderer::DrawDoors(const DrawContext& ctx, const WorldLighting& light
                     world = Matrix::CreateScale(leafW, h, t) * Matrix::CreateRotationY(yaw) * Matrix::CreateTranslation(c.x, y0 + h * 0.5f + 0.015f, c.z);
                 } else {
                     float yaw = std::atan2(-dir.z, dir.x);
-                    // +delta turns local +x towards (sin yaw... ) : pick the sign that swings towards the normal
+                    // The leaf swings away from the corridor (into the room); an exit swings outwards; otherwise towards b.
+                    School::Vec2 swing = n;
+                    const bool aCirc = School::Info(plan_.room(d.a).type).circulation, bCirc = School::Info(plan_.room(d.b).type).circulation;
+                    if (bCirc && !aCirc) swing = n * -1.0f;
+                    if (d.exit && plan_.room(d.b).Indoor()) swing = n * -1.0f;
                     const School::Vec2 perp{dir.z, -dir.x};
-                    const float sign = School::Dot(perp, n) > 0.0f ? 1.0f : -1.0f;
+                    const float sign = School::Dot(perp, swing) > 0.0f ? 1.0f : -1.0f;
                     yaw += sign * open * MathHelper::PiOver2 * 0.95f;
                     world = Matrix::CreateTranslation(0.5f, 0.5f, 0.0f) * Matrix::CreateScale(leafW, h, t) * Matrix::CreateRotationY(yaw) * Matrix::CreateTranslation(hinge.x, y0 + 0.015f, hinge.z);
                 }

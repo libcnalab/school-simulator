@@ -239,7 +239,12 @@ Goal SchoolSim::SeatGoal(const Npc& npc, const ClassGroup& g, const Lesson& less
             goal.pos = s.pos;
             goal.yaw = s.yaw;
             goal.pose = s.pose;
-            if (static_cast<std::size_t>(rank) >= list.size()) goal.pos = goal.pos + Vec2{0.35f, 0.0f} * static_cast<float>(rank / list.size());
+            if (static_cast<std::size_t>(rank) >= list.size()) {
+                // More people than seats: stand in rings around the seat, never outside the room.
+                const int ring = static_cast<int>(static_cast<std::size_t>(rank) / list.size());
+                const float ang = static_cast<float>(ring) * 2.399f + static_cast<float>(rank % 7) * 0.9f;
+                goal.pos = plan_.room(room).rect.Clamp(goal.pos + Vec2{std::cos(ang), std::sin(ang)} * (0.45f * static_cast<float>(ring)), 0.4f);
+            }
         }
         goal.activity = goal.pose == Pose::Exercise ? Activity::Exercising : Activity::InLesson;
     } else {
@@ -314,7 +319,12 @@ Goal SchoolSim::CafeteriaGoal(const Npc& npc, std::uint64_t salt)
         g.pos = s.pos;
         g.yaw = s.yaw;
         g.pose = Pose::Stand;
-        if (static_cast<std::size_t>(idx) >= l.queue.size()) g.pos = g.pos + Vec2{0.3f, 0.3f} * static_cast<float>(idx / l.queue.size());
+        if (static_cast<std::size_t>(idx) >= l.queue.size()) {
+            // The line is longer than its marked slots: wait in loose rows behind it, inside the room.
+            const int ring = static_cast<int>(static_cast<std::size_t>(idx) / l.queue.size());
+            const float ang = static_cast<float>(ring) * 2.399f + static_cast<float>(idx % 5) * 1.2f;
+            g.pos = plan_.room(g.room).rect.Clamp(g.pos + Vec2{std::cos(ang), std::sin(ang)} * (0.5f * static_cast<float>(ring)), 0.5f);
+        }
     } else {
         g.pos = plan_.room(g.room).rect.Center();
     }

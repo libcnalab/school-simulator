@@ -161,6 +161,9 @@ void SkyDome::Draw(const DrawContext& ctx)
         colour = colour + Vector3(1.0f, 0.45f, 0.18f) * glow;
         const float halo = std::pow(std::max(0.0f, Vector3::Dot(d, sun)), 24.0f) * day * 0.35f;
         colour = colour + Vector3(1.0f, 0.9f, 0.7f) * halo;
+        // Overcast: a grey lid, darker at the zenith, with no sun glow.
+        const Vector3 grey = Mix(Vector3(0.62f, 0.64f, 0.67f), Vector3(0.40f, 0.42f, 0.46f), t) * (0.15f + 0.85f * day);
+        colour = Mix(colour, grey, overcast_);
         gradient_.vertices[i] = VertexPositionColorTexture(d * kDomeRadius, ToColor(colour), Vector2(0, 0));
     }
 
@@ -171,8 +174,8 @@ void SkyDome::Draw(const DrawContext& ctx)
         const Vector3& d = clouds_.directions[i];
         const float denom = std::max(d.Y, 0.12f) + 0.15f;
         const Vector2 uv(d.X / denom * 0.9f + scroll, d.Z / denom * 0.9f + scroll * 0.4f);
-        const float fade = SmoothStep(0.02f, 0.30f, d.Y);
-        clouds_.vertices[i] = VertexPositionColorTexture(d * (kDomeRadius * 0.96f), ToColor(cloudTint, fade), uv);
+        const float fade = SmoothStep(0.02f, 0.30f, d.Y) * (1.0f - 0.7f * overcast_);
+        clouds_.vertices[i] = VertexPositionColorTexture(d * (kDomeRadius * 0.96f), ToColor(Mix(cloudTint, Vector3(0.5f, 0.52f, 0.55f) * day, overcast_), fade), uv);
     }
 
     const Matrix world = Matrix::CreateTranslation(ctx.view.eye);
@@ -221,7 +224,7 @@ void SkyDome::Draw(const DrawContext& ctx)
         for (const Vector3& star : stars_) quad(star, 0.55f, ToColor(Vector3(1, 1, 1), night * 0.85f));
         quad(-sun, 4.5f, ToColor(Vector3(0.85f, 0.9f, 1.0f), std::min(1.0f, night * 1.4f)));
     }
-    if (sunHeight > -0.2f) {
+    if (sunHeight > -0.2f && overcast_ < 0.5f) {
         quad(sun, 9.0f, ToColor(Mix(Vector3(1.0f, 0.55f, 0.3f), Vector3(1.0f, 0.97f, 0.85f), SmoothStep(0.0f, 0.5f, sunHeight)), 1.0f));
         quad(sun, 22.0f, ToColor(Vector3(1.0f, 0.85f, 0.6f), 0.35f * std::clamp(sunHeight + 0.2f, 0.0f, 1.0f)));
     }

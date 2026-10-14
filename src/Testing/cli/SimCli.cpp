@@ -18,7 +18,8 @@ int main(int argc, char** argv)
     bool validate = false, stats = false, population = false, day = false, check = false, full = false;
     int days = 1;
     double focusX = 82, focusZ = 112;
-    int students = 500;
+    int students = -1;
+    Preset preset = Preset::Normal;
     for (int i = 1; i < argc; ++i) {
         if (!std::strcmp(argv[i], "--validate")) validate = true;
         else if (!std::strcmp(argv[i], "--stats")) stats = true;
@@ -28,6 +29,11 @@ int main(int argc, char** argv)
         else if (!std::strcmp(argv[i], "--days") && i + 1 < argc) { day = true; days = std::atoi(argv[++i]); }
         else if (!std::strcmp(argv[i], "--check")) check = true;
         else if (!std::strcmp(argv[i], "--full")) full = true;
+        else if (!std::strcmp(argv[i], "--preset") && i + 1 < argc) {
+            bool ok = false;
+            preset = ParsePreset(argv[++i], &ok);
+            if (!ok) std::fprintf(stderr, "unknown preset '%s'\n", argv[i]);
+        }
     }
     const SchoolPlan plan = BuildSchoolPlan();
     int status = 0;
@@ -43,8 +49,8 @@ int main(int argc, char** argv)
                     s.indoorRooms, s.outdoorZones, s.corridors, s.doors, s.stairs, static_cast<double>(s.indoorAreaM2));
     }
     if (population) {
-        PopulationSpec spec;
-        spec.students = students;
+        PopulationSpec spec = PopulationSpec::FromPreset(preset);
+        if (students >= 0) spec.students = students;
         const Population pop = BuildPopulation(plan, spec);
         const std::vector<std::string> errors = ValidateTimetable(plan, pop);
         for (std::size_t i = 0; i < errors.size() && i < 30; ++i) std::fprintf(stderr, "invalid: %s\n", errors[i].c_str());
@@ -63,6 +69,7 @@ int main(int argc, char** argv)
         const NavGraph nav(plan);
         const LayoutCache layouts(plan);
         SimSettings settings;
+        settings.preset = preset;
         settings.students = students;
         settings.enableFull = full;
         SchoolSim sim(plan, nav, layouts, BellSchedule::Default(), settings);

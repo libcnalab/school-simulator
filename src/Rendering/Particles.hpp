@@ -23,6 +23,7 @@ struct Particle {
     float size1 = 0.1f;
     float rotation = 0.0f;
     float spin = 0.0f;
+    float stretch = 1.0f;         // > 1: a streak this many times taller than wide, aligned with the world's up
     Microsoft::Xna::Framework::Color colour0;
     Microsoft::Xna::Framework::Color colour1;
 };

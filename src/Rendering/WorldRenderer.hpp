@@ -38,8 +38,15 @@ public:
     WorldRenderer(Services& services, const School::SchoolPlan& plan, const School::LayoutCache& layouts);
     ~WorldRenderer();
 
-    /** Chooses which rooms to keep in memory around the player and builds a few of them. */
+    /** A secondary place to keep rooms loaded around (a CCTV camera). */
+    struct Anchor {
+        Microsoft::Xna::Framework::Vector3 position;
+        int level = 1;
+        float radius = 22.0f;
+    };
+    /** Chooses which rooms to keep in memory around the player (and the anchors) and builds a few of them. */
     void Update(const Microsoft::Xna::Framework::Vector3& eye, int level, float dt);
+    void Update(const Microsoft::Xna::Framework::Vector3& eye, int level, float dt, const std::vector<Anchor>& anchors);
     /** Draws the opaque world, then door leaves, then glass. */
     void Draw(const DrawContext& ctx, const WorldLighting& light, const std::vector<School::DoorRuntime>& doors);
 

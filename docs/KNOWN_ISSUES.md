@@ -1,0 +1,25 @@
+# Known issues
+
+## Open
+
+- **Constant UVs render black on EasyGL** (OPENGLES3, Mesa llvmpipe): a textured BasicEffect draw whose
+  triangles all carry the same texture coordinate comes out black with `SamplerState::AnisotropicWrap`.
+  The school gives every face real UVs, so nothing in the app shows it; a CNA-side check (LOD clamp or
+  anisotropic fallback) is still worth doing. Found 2026-10-14.
+- Only OPENGLES3 has been run so far; OPENGL33 and SOFTWARE results are pending (`docs/RENDERER_TESTING.md`).
+- Frame rate on the build host is 10-25 fps because it has no GPU (llvmpipe); not measured on hardware.
+- Extreme population: 21 late arrivals per day (people whose seat overflowed walk further); fine, but the
+  overflow spots are rings around a seat, not extra desks.
+- Corridors are drawn one mesh per 18 m segment with about six draw calls each; a wing-level merge would
+  halve the draw calls in long views.
+- The player can look through the gap between the interior wall and the facade at a window reveal when
+  standing inside the reveal box (0.3 m); the collision keeps the player 0.3 m from walls, so it needs effort.
+
+## Fixed
+
+- NPC boxes rendered black (constant UVs, see above). 2026-10-14.
+- Screen quads invisible: flipping a panel's width axis flipped the winding, CullClockwise dropped them;
+  texture coordinates are mirrored instead. 2026-10-14.
+- CCTV quads hidden inside the screen fixture (missing the depth offset). 2026-10-14.
+- Extreme population: seat and queue overflow positions could leave the room; clamped. 2026-10-14.
+- Bells rung during the start-up fast-forward were announced as news. 2026-10-14.

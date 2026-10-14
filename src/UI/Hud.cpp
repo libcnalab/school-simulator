@@ -82,7 +82,7 @@ void Hud::DrawHelp()
         "Esc   pause             F1 / H   this help    F3   statistics      F4   debug overlays",
         "Tab   map               R   back to the entrance                  F11   fullscreen",
         "Space   pause the clock       1 2 3 4 5   speed x1 x2 x5 x10 x30        N   next lesson",
-        "B   ring the bell       F   fire drill on/off         P   announcement       F2   mute",
+        "B   ring the bell       F   fire drill on/off         P   announcement       O   weather",
         "[ ]   mouse sensitivity       - =   volume          Page Up/Down, arrows   look",
         "Gamepad: left stick walk, right stick look, A use, Start pause, Y map",
     };

@@ -146,6 +146,9 @@ void SchoolGame::LoadContent()
     services_.timeOfDay = &timeOfDay_;
     world_ = std::make_unique<WorldRenderer>(services_, plan_, *layouts_);
     npcs_ = std::make_unique<NpcRenderer>(services_);
+    weather_ = std::make_unique<Weather>(services_);
+    weather_->SetKind(options_.weather);
+    screens_ = std::make_unique<Screens>(services_, plan_, *layouts_);
     collision_ = std::make_unique<CollisionWorld>(plan_, *layouts_);
     gizmos_ = std::make_unique<Gizmos>(services_);
     hud_ = std::make_unique<Hud>(services_);
@@ -187,6 +190,8 @@ void SchoolGame::UnloadContent()
     minimap_.reset();
     hud_.reset();
     gizmos_.reset();
+    screens_.reset();
+    weather_.reset();
     npcs_.reset();
     world_.reset();
     sky_.reset();
@@ -240,11 +245,6 @@ bool SchoolGame::GoToRoom(const std::string& key)
             PlaceInRoom(r.id);
             return true;
         }
-    for (const Room& r : plan_.rooms)
-        if (r.name == key) {
-            PlaceInRoom(r.id);
-            return true;
-        }
     // a type name ("Gymnasium", "gym", "computer lab", "ComputerLab"): the largest room of that type
     const auto fold = [](std::string t) {
         std::string out;
@@ -254,10 +254,10 @@ bool SchoolGame::GoToRoom(const std::string& key)
     };
     const std::string want = fold(key);
     RoomId best = School::kNone;
-    for (int pass = 0; pass < 2 && best == School::kNone; ++pass)
+    for (int pass = 0; pass < 3 && best == School::kNone; ++pass)
         for (const Room& r : plan_.rooms) {
             const std::string tn = fold(School::TypeName(r.type));
-            const bool hit = pass == 0 ? tn == want : tn.rfind(want, 0) == 0;
+            const bool hit = pass == 0 ? tn == want : pass == 1 ? fold(r.name).rfind(want, 0) == 0 : tn.rfind(want, 0) == 0;
             if (hit && (best == School::kNone || r.rect.Area() > plan_.room(best).rect.Area())) best = r.id;
         }
     if (best == School::kNone) return false;
@@ -369,6 +369,16 @@ void SchoolGame::HandleSystemKeys()
             }
         }
         if (input_.Pressed(Keys::P)) Announce();
+        if (input_.Pressed(Keys::O)) {
+            static const char* kinds[] = {"clear", "rain", "snow", "fog"};
+            int k = 0;
+            for (int i = 0; i < 4; ++i)
+                if (options_.weather == kinds[i]) k = i;
+            options_.weather = kinds[(k + 1) % 4];
+            weather_->SetKind(options_.weather);
+            schoolAudio_->SetWeather(options_.weather);
+            hud_->Toast(std::string("Weather: ") + options_.weather, 1.5f);
+        }
     }
     if (paused_) {
         if (input_.Pressed(Keys::Q)) Exit();
@@ -409,6 +419,8 @@ void SchoolGame::UpdateFrameStats(float dt)
     stats_.npcDrawn = npcStats_.drawn;
     stats_.npcDrawnDetailed = npcStats_.detailed;
     stats_.activeVoices = audio_->ActiveVoiceCount();
+    stats_.particles = weather_->Count();
+    stats_.screensRendered = screens_->RenderedThisFrame();
     stats_.textures = static_cast<int>(textures_->Count());
     (void)ss;
 }
@@ -421,7 +433,10 @@ void SchoolGame::StepSimulation(float dt)
     f.pos = School::Vec2{feet.X, feet.Z};
     f.level = player_->Level();
     f.radius = sim_->Settings().fullRadius;
-    sim_->SetFocus({f});
+    std::vector<School::Focus> focus = {f};
+    if (screens_)
+        for (const WorldRenderer::Anchor& a : screens_->Anchors()) focus.push_back(School::Focus{School::Vec2{a.position.X, a.position.Z}, a.level, a.radius});
+    sim_->SetFocus(focus);
     if (!timePaused_ && timeScale_ > 0.0f) {
         // Large multipliers are stepped in slices so the full-fidelity walkers stay stable.
         double remaining = static_cast<double>(dt) * static_cast<double>(timeScale_);
@@ -486,7 +501,12 @@ void SchoolGame::UpdateInteractables()
             it.box = CollisionWorld::FixtureBounds(f, y0);
             if (f.type == School::FixtureType::Whiteboard || f.type == School::FixtureType::Screen) {
                 const RoomId room = id;
-                it.prompt = r.type == RoomType::SecurityOffice ? "CCTV wall" : "Read the board";
+                it.prompt = r.type == RoomType::SecurityOffice ? "Switch the CCTV cameras" : "Read the board";
+                if (r.type == RoomType::SecurityOffice) {
+                    it.activate = [this] { screens_->CycleCameras(); };
+                    interaction_.Add(std::move(it));
+                    continue;
+                }
                 it.activate = [this, room] {
                     const School::SchoolSim::RoomLesson lesson = sim_->LessonIn(room);
                     const Room& rr = plan_.room(room);
@@ -504,10 +524,11 @@ void SchoolGame::UpdateInteractables()
                 it.activate = [this] { Announce(); };
                 interaction_.Add(std::move(it));
             } else if (f.type == School::FixtureType::ComputerDesk && r.type == RoomType::SecurityOffice) {
-                it.prompt = sim_->Drill().active ? "End the fire drill" : "Start a fire drill";
+                it.prompt = "Switch the CCTV cameras";
                 it.activate = [this] {
-                    if (sim_->Drill().active) sim_->EndDrill();
-                    else sim_->StartDrill();
+                    screens_->CycleCameras();
+                    const auto& cams = screens_->Cameras();
+                    if (!cams.empty()) hud_->Toast("CCTV: " + cams[0].name + " and the next three", 2.0f);
                 };
                 interaction_.Add(std::move(it));
             } else if (f.type == School::FixtureType::Vending) {
@@ -596,7 +617,12 @@ void SchoolGame::Update(GameTime& gameTime)
         if (!bigMap_) player_->Update(dt, camera_, *collision_, input_, true);
         UpdateRoomBanner(dt);
         StepSimulation(dt);
-        world_->Update(camera_.Position(), player_->Level(), dt);
+        screens_->Update(dt, camera_.Position(), *sim_);
+        world_->Update(camera_.Position(), player_->Level(), dt, screens_->Anchors());
+        {
+            const bool out = currentRoom_ == School::kNone || !plan_.room(currentRoom_).Indoor();
+            weather_->Update(dt, camera_.Position(), out, player_->Feet().Y);
+        }
         // Doors open for the player as they do for everybody else.
         const Vector3 feet = player_->Feet();
         if (currentRoom_ != School::kNone)
@@ -644,8 +670,8 @@ std::vector<std::string> SchoolGame::StatsLines() const
     std::snprintf(buf, sizeof buf, "rooms loaded %d  drawn %d  built %d  build %.1f ms  doors %d", stats_.roomsLoaded, stats_.roomsDrawn, stats_.roomsBuiltTotal,
                   static_cast<double>(stats_.buildMilliseconds), stats_.doorsDrawn);
     out.emplace_back(buf);
-    std::snprintf(buf, sizeof buf, "triangles %d  draw calls %d  textures %d  voices %d  loops %d", stats_.trianglesDrawn, stats_.drawCalls, stats_.textures, stats_.activeVoices,
-                  schoolAudio_->ActiveLoops());
+    std::snprintf(buf, sizeof buf, "triangles %d  draw calls %d  textures %d  voices %d  loops %d  particles %d  screens/frame %d  cctv %s", stats_.trianglesDrawn, stats_.drawCalls,
+                  stats_.textures, stats_.activeVoices, schoolAudio_->ActiveLoops(), stats_.particles, stats_.screensRendered, screens_->CctvActive() ? "on" : "off");
     out.emplace_back(buf);
     std::snprintf(buf, sizeof buf, "paths %d  events %lld  door passes %lld  unstuck %lld  unreachable %d  late %.0f  stuck now %d", ss.pathBuilds, ss.events, ss.doorPasses, ss.unstuck,
                   ss.unreachable, ss.lateArrivals, sim_->StuckSuspects());
@@ -730,12 +756,15 @@ void SchoolGame::Draw(const GameTime& gameTime)
 
     // Daylight for everything outdoors; fog for distance and weather.
     const float day = timeOfDay_.Daylight();
+    const float overcast = options_.weather == "clear" ? 0.0f : (options_.weather == "fog" ? 0.6f : 0.85f);
+    sky_->SetOvercast(overcast);
     WorldLighting light;
     const Vector3 sun = timeOfDay_.SunColor();
     light.daylight = day;
     light.sunDirection = -timeOfDay_.SunDirection();
     light.outdoorTint = Vector3::Clamp(timeOfDay_.AmbientColor() * 0.9f + sun * 0.75f + Vector3(0.08f, 0.08f, 0.1f), Vector3(0.12f, 0.13f, 0.18f), Vector3(1, 1, 1));
-    const Vector3 fogColour = Vector3::Lerp(Vector3(0.03f, 0.04f, 0.09f), Vector3(0.74f, 0.82f, 0.92f), day);
+    light.outdoorTint = light.outdoorTint * (1.0f - 0.4f * overcast);
+    const Vector3 fogColour = Vector3::Lerp(Vector3::Lerp(Vector3(0.03f, 0.04f, 0.09f), Vector3(0.74f, 0.82f, 0.92f), day), Vector3(0.55f, 0.57f, 0.6f) * (0.2f + 0.8f * day), overcast);
     const bool foggy = options_.weather == "fog";
     for (BasicEffect* fx : {&effects_->World(), &effects_->Lit()}) {
         fx->setFogEnabledProperty(true);
@@ -752,6 +781,9 @@ void SchoolGame::Draw(const GameTime& gameTime)
             device.SetRenderTarget(nullptr);
         }
     };
+    stage("offscreen", [&] { screens_->RenderOffscreen(device, *effects_, *sky_, *world_, *npcs_, *sim_, light, time_); });
+    device.SetRenderTarget(nullptr);
+    effects_->SetCamera(view.view, view.projection);
     device.Clear(ClearOptions::Target | ClearOptions::DepthBuffer | ClearOptions::Stencil, Color(0, 0, 0, 255), 1.0f, 0);
     RenderStates::SetOpaque3D(device);
     effects_->World().setFogEnabledProperty(false);
@@ -759,6 +791,8 @@ void SchoolGame::Draw(const GameTime& gameTime)
     effects_->World().setFogEnabledProperty(true);
     stage("world", [&] { world_->Draw(ctx, light, sim_->Doors()); });
     stage("people", [&] { npcs_->Draw(ctx, *sim_, *world_, npcStats_); });
+    stage("screens", [&] { screens_->Draw(ctx, *sim_, *world_); });
+    stage("weather", [&] { weather_->Draw(ctx); });
     stage("debug", [&] { DrawDebug(ctx); });
     effects_->World().setFogEnabledProperty(false);
     effects_->Lit().setFogEnabledProperty(false);
@@ -878,15 +912,25 @@ void SchoolGame::RunScript()
             if (!GoToRoom(arg)) School::Log("script", "goto: unknown room '%s'", arg.c_str());
         } else if (op == "busiest") {
             // busiest:TYPE  stand in the room of that type with the most people in it
+            // Counts everybody, including walkers passing through (OccupantsOf knows only the seated and the nearby).
+            std::vector<int> count(plan_.rooms.size(), 0);
+            for (const School::Npc& n : sim_->Pop().npcs) {
+                if (sim_->AgentOf(n.id).mode == School::Mode::Offsite) continue;
+                School::Vec3 p;
+                float yaw;
+                RoomId room;
+                sim_->Observe(n.id, p, yaw, room);
+                if (room != School::kNone) ++count[static_cast<std::size_t>(room)];
+            }
             RoomId best = School::kNone;
             for (const Room& r : plan_.rooms) {
                 const std::string tn = School::TypeName(r.type);
                 if (tn.size() != arg.size() || !std::equal(tn.begin(), tn.end(), arg.begin(), [](char a, char b) { return std::tolower(a) == std::tolower(b); })) continue;
-                if (best == School::kNone || sim_->OccupantsOf(r.id) > sim_->OccupantsOf(best)) best = r.id;
+                if (best == School::kNone || count[static_cast<std::size_t>(r.id)] > count[static_cast<std::size_t>(best)]) best = r.id;
             }
             if (best != School::kNone) {
                 PlaceInRoom(best);
-                School::Log("script", "busiest %s: %s with %d people", arg.c_str(), plan_.room(best).name.c_str(), sim_->OccupantsOf(best));
+                School::Log("script", "busiest %s: %s with %d people", arg.c_str(), plan_.room(best).name.c_str(), count[static_cast<std::size_t>(best)]);
             } else {
                 School::Log("script", "busiest: no room of type '%s'", arg.c_str());
             }

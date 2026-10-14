@@ -94,8 +94,12 @@ void ParticleRenderer::Draw(const DrawContext& ctx, Texture2D* texture, const Bl
                       lerp(p.colour0.getBProperty(), p.colour1.getBProperty()), lerp(p.colour0.getAProperty(), p.colour1.getAProperty()));
         const float cs = std::cos(p.rotation) * size;
         const float sn = std::sin(p.rotation) * size;
-        const Vector3 r = right * cs + up * sn;
-        const Vector3 u = up * cs - right * sn;
+        Vector3 r = right * cs + up * sn;
+        Vector3 u = up * cs - right * sn;
+        if (p.stretch != 1.0f) {
+            r = right * size;
+            u = Vector3::Up * (size * p.stretch);
+        }
         vertices_.emplace_back(p.position - r + u, c, Vector2(0, 0));
         vertices_.emplace_back(p.position + r + u, c, Vector2(1, 0));
         vertices_.emplace_back(p.position + r - u, c, Vector2(1, 1));

@@ -36,8 +36,11 @@ public:
     SkyDome(Services& services, TimeOfDay& time);
 
     void Draw(const DrawContext& ctx);
+    /** 0 = clear sky, 1 = a grey lid of cloud (rain, snow). */
+    void SetOvercast(float overcast) { overcast_ = overcast; }
 
 private:
+    float overcast_ = 0.0f;
     struct Dome {
         std::vector<Microsoft::Xna::Framework::Vector3> directions;   // unit vectors per vertex
         std::vector<Microsoft::Xna::Framework::Graphics::VertexPositionColorTexture> vertices;

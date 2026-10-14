@@ -55,6 +55,7 @@ target_compile_options(school_tests PRIVATE -Wall -Wextra)
 add_test(NAME school_logic COMMAND school_tests)
 add_test(NAME school_day COMMAND school-sim-cli --day --students 500 --check)
 add_test(NAME school_validate COMMAND school-sim-cli --validate)
+add_test(NAME school_day_extreme COMMAND school-sim-cli --day --preset extreme --check)
 
 # --- the CNA application -------------------------------------------------------------------------
 if(SCHOOL_BUILD_APP)
