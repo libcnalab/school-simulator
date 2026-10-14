@@ -232,9 +232,10 @@ void NpcRenderer::AddFigure(const Figure& f)
     AddBox(torsoM, Vector3(-shoulderW * 0.5f, 0, -torsoD * 0.5f), Vector3(shoulderW * 0.5f, torsoH, torsoD * 0.5f), k.shirt);
     if (f.lod >= 1) {
         const float neck = torsoH + 0.02f;
-        AddBox(torsoM, Vector3(-headH * 0.4f, neck, -headH * 0.45f), Vector3(headH * 0.4f, neck + headH, headH * 0.45f), k.skin);
+        const Matrix headM = f.headYaw != 0.0f ? Matrix::CreateRotationY(f.headYaw) * Matrix::CreateTranslation(0, neck, 0) * torsoM : Matrix::CreateTranslation(0, neck, 0) * torsoM;
+        AddBox(headM, Vector3(-headH * 0.4f, 0.0f, -headH * 0.45f), Vector3(headH * 0.4f, headH, headH * 0.45f), k.skin);
         // hair cap
-        AddBox(torsoM, Vector3(-headH * 0.42f, neck + headH * 0.62f, -headH * 0.42f), Vector3(headH * 0.42f, neck + headH + 0.01f, headH * 0.47f), k.hair);
+        AddBox(headM, Vector3(-headH * 0.42f, headH * 0.62f, -headH * 0.42f), Vector3(headH * 0.42f, headH + 0.01f, headH * 0.47f), k.hair);
     } else {
         AddBox(torsoM, Vector3(-headH * 0.4f, torsoH + 0.02f, -headH * 0.45f), Vector3(headH * 0.4f, torsoH + 0.02f + headH, headH * 0.45f), k.skin);
     }
@@ -331,6 +332,14 @@ void NpcRenderer::Draw(const DrawContext& ctx, const School::SchoolSim& sim, con
         f.time = static_cast<float>(now) + phaseSeed * 3.0f;
         const float d = std::sqrt(d2);
         f.lod = d < detailRadius ? 2 : (d < mediumRadius ? 1 : 0);
+        // Someone standing about within a few metres glances at the player (not while walking, sitting or working).
+        if (!f.walking && d < 7.0f && (f.pose == Pose::Stand || f.pose == Pose::Browse)) {
+            const float toEye = std::atan2(-(eye.X - pos.X), -(eye.Z - pos.Z));
+            float rel = toEye - f.yaw;
+            while (rel > MathHelper::Pi) rel -= MathHelper::TwoPi;
+            while (rel < -MathHelper::Pi) rel += MathHelper::TwoPi;
+            if (std::fabs(rel) < 1.4f) f.headYaw = rel * 0.8f;
+        }
         if (looks_.size() != pop.npcs.size()) {
             looks_.clear();
             looks_.reserve(pop.npcs.size());

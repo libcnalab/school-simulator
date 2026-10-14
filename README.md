@@ -56,7 +56,8 @@ build/bin/cna-school-simulator --help
 Controls: `W A S D` walk, mouse look, `Shift` run, `E` / click use, `Esc` pause, `F1` help, `F3` statistics,
 `F4` debug overlays, `Tab` map, `M` minimap, `Space` stop the clock, `1`..`5` time x1 x2 x5 x10 x30, `N` next lesson,
 `B` bell, `F` fire drill, `P` announcement, `O` weather, `,` `.` fifteen minutes back or on, `R` back to the entrance, `F11` fullscreen, `F2` mute.
-Elevators: `E` on the call button beside the door, step in, `E` on the panel's up or down button.
+Elevators: `E` on the call button beside the door, step in, `E` on the panel's up or down button. Light switches
+beside the doors inside rooms switch a room's lights off, on, or back to automatic (they follow occupancy and daylight).
 A gamepad works too (left stick walk, right stick look, A use, Start pause, Y map).
 
 Headless (no display): `xvfb-run -a -s "-screen 0 1280x720x24" build/bin/cna-school-simulator --no-audio --script "..."`.

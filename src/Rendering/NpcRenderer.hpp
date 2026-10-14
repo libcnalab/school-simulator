@@ -48,6 +48,7 @@ private:
         bool walking;
         float time;           // for idle motions
         int lod;
+        float headYaw = 0.0f;   // relative to the body: idle people glance at the player
         Look look;
     };
     void AddFigure(const Figure& f);
