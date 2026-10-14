@@ -328,6 +328,37 @@ Texture2D* Screens::PlateFor(School::RoomId room)
     return ptr;
 }
 
+Texture2D* Screens::WingSignFor(int wing, int level)
+{
+    const int key = wing * 16 + level;
+    auto it = wingSigns_.find(key);
+    if (it != wingSigns_.end()) return it->second.get();
+    if (s_.font == nullptr) return nullptr;
+    const School::Wing& w = plan_.wings[static_cast<std::size_t>(wing)];
+    auto rt = std::make_unique<RenderTarget2D>(*s_.device, 512, 128, false, SurfaceFormat::Color, DepthFormat::None, 0, RenderTargetUsage::PreserveContents);
+    GraphicsDevice& device = *s_.device;
+    device.SetRenderTarget(rt.get());
+    device.Clear(Color(static_cast<int>(w.accent[0] * 255.0f), static_cast<int>(w.accent[1] * 255.0f), static_cast<int>(w.accent[2] * 255.0f), 255));
+    const SamplerState sampler = SamplerState::LinearClamp;
+    s_.sprites->Begin(SpriteSortMode::Deferred, &BlendState::NonPremultiplied, &sampler, nullptr, nullptr);
+    std::string name = w.name;
+    std::string detail;
+    if (const std::size_t paren = name.find(" ("); paren != std::string::npos) {
+        detail = name.substr(paren + 2, name.size() - paren - 3);
+        name = name.substr(0, paren);
+    }
+    const int floorLabel = level - 1;
+    const std::string floor = floorLabel < 0 ? "Basement" : floorLabel == 0 ? "Ground floor" : "Floor " + std::to_string(floorLabel);
+    s_.sprites->DrawString(*s_.font, name, Vector2(20, 14), Color(255, 255, 255, 255), 0.0f, Vector2(0, 0), 1.15f, SpriteEffects::None, 0.0f);
+    s_.sprites->DrawString(*s_.font, detail + (detail.empty() ? "" : "   -   ") + floor, Vector2(20, 72), Color(240, 240, 240, 255), 0.0f, Vector2(0, 0), 0.75f, SpriteEffects::None, 0.0f);
+    s_.sprites->End();
+    device.SetRenderTarget(nullptr);
+    Texture2D* ptr = rt.get();
+    wingSigns_[key] = std::move(rt);
+    ++rendered_;
+    return ptr;
+}
+
 void Screens::RenderOffscreen(GraphicsDevice& device, EffectBank& fx, SkyDome& sky, WorldRenderer& world, NpcRenderer& npcs, const School::SchoolSim& sim, const WorldLighting& light, double time)
 {
     rendered_ = 0;
@@ -538,6 +569,40 @@ void Screens::Draw(const DrawContext& ctx, const School::SchoolSim& sim, const W
             q.texture = diagnostics_.get();
             quads.push_back(q);
         }
+    // Wing signs: above the doors in the middle of every other corridor segment, on the wall with fewer doors.
+    for (const School::RoomId id : world.LoadedRooms()) {
+        const Room& r = plan_.room(id);
+        if (r.type != RoomType::Corridor || (id % 2) != 0 || std::max(r.rect.Width(), r.rect.Depth()) < 10.0f) continue;
+        const School::Vec2 c = r.rect.Center();
+        const Vector3 centre3(c.x, plan_.FloorY(r.level) + 2.6f, c.z);
+        if (Vector3::DistanceSquared(centre3, ctx.view.eye) > 45.0f * 45.0f) continue;
+        const bool alongX = r.rect.Width() >= r.rect.Depth();
+        int doorsA = 0, doorsB = 0;   // the two long walls
+        for (const School::DoorId did : r.doors) {
+            const School::Door& d = plan_.door(did);
+            const School::Side side = d.a == id ? d.sideOfA : School::Opposite(d.sideOfA);
+            if (alongX ? side == School::Side::North : side == School::Side::West) ++doorsA;
+            else if (alongX ? side == School::Side::South : side == School::Side::East) ++doorsB;
+        }
+        const School::Side wall = alongX ? (doorsA <= doorsB ? School::Side::North : School::Side::South) : (doorsA <= doorsB ? School::Side::West : School::Side::East);
+        const School::Vec2 n = School::SideNormal(wall) * -1.0f;   // into the corridor
+        School::Vec2 at = c;
+        switch (wall) {
+        case School::Side::North: at.z = r.rect.z0; break;
+        case School::Side::South: at.z = r.rect.z1; break;
+        case School::Side::West: at.x = r.rect.x0; break;
+        default: at.x = r.rect.x1; break;
+        }
+        at = at + n * 0.02f;
+        Vector3 right, up, nn;
+        panelAxes(std::atan2(-n.x, -n.z), 1.6f, 0.4f, right, up, nn);
+        Quad q;
+        q.centre = Vector3(at.x, plan_.FloorY(r.level) + 2.75f, at.z);
+        q.right = right;
+        q.up = up;
+        q.texture = WingSignFor(r.wing, r.level);
+        quads.push_back(q);
+    }
     // The auditorium's projection screen shows the signage.
     if (signageAge_ < 30.0f)
         for (const School::RoomId id : world.LoadedRooms()) {

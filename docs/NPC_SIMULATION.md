@@ -72,6 +72,14 @@ alarm as a bell event; arrivals are counted; the drill ends by itself four minut
 (or after an hour) and `AssignGoals` resumes the timetable. A drill is scheduled in the schedule file
 (`drill 10:20 wed`); `F` or the alarm points in the lobby start one by hand.
 
+## What the numbers mean
+
+`school-sim-cli --day --full --students 300` prints a line per quarter hour and a summary. "Late arrivals" are
+students who reach their seat more than 30 s after a lesson started (people returning from a fire drill are
+not counted); a handful per day is normal, hundreds mean a change of rooms is too short for the distances.
+"Unstuck" counts full-fidelity walkers who made no progress for seven seconds and hopped to their next
+waypoint; a few per day happen in dense doorways. "Unreachable" must stay zero.
+
 ## Checks
 
 `CheckInvariants` (modes vs rooms vs journeys, finite positions, nobody below the building) runs every

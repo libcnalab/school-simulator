@@ -10,7 +10,9 @@ The day is a list of phases; each starts when the previous one ends (`Simulation
 08:45   passing    2       Change of rooms
 ...
 12:35   lunch      -       Lunch           (two waves: checkpoints at the start and halfway)
-15:15   dismissal  -       End of school
+14:25   passing    7       Change of rooms  (every change is ten minutes: five was too short for the far wings)
+14:35   lesson     7       Lesson 7
+15:20   dismissal  -       End of school
 15:40   clubs      -       After-school clubs
 17:30   closing    -       Closing
 19:00   night      -       Closed

@@ -105,6 +105,8 @@ private:
     bool signageNear_ = false;
     std::map<int, std::unique_ptr<Microsoft::Xna::Framework::Graphics::RenderTarget2D>> boards_;
     std::map<int, std::unique_ptr<Microsoft::Xna::Framework::Graphics::RenderTarget2D>> plates_;   // door plates by room
+    std::map<int, std::unique_ptr<Microsoft::Xna::Framework::Graphics::RenderTarget2D>> wingSigns_;   // by wing * 16 + level
+    Microsoft::Xna::Framework::Graphics::Texture2D* WingSignFor(int wing, int level);
     std::vector<Microsoft::Xna::Framework::Graphics::VertexPositionColorTexture> scratch_;
     int rendered_ = 0;
     Microsoft::Xna::Framework::Vector3 eye_;

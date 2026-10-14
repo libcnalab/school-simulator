@@ -126,7 +126,8 @@ struct SimStats {
     long long events = 0;
     long long unstuck = 0;
     long long doorPasses = 0;
-    long long elevatorRides = 0;
+    long long elevatorRides = 0;        // boardings completed at full fidelity
+    long long elevatorJourneys = 0;     // journeys planned through a lift, at any fidelity
     int bellsRung = 0;
     int unreachable = 0;            // goals that no route led to (should stay 0)
     double lateArrivals = 0;        // students arriving after their lesson began (count)

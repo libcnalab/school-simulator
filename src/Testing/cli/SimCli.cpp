@@ -116,8 +116,8 @@ int main(int argc, char** argv)
         }
         const double secs = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
         const SimStats& st = sim.Stats();
-        std::printf("%.2f s wall; path builds %d, events %lld, door passes %lld, elevator rides %lld, unstuck %lld, unreachable %d, bells %d, late arrivals %.0f\n", secs,
-                    st.pathBuilds, st.events, st.doorPasses, st.elevatorRides, st.unstuck, st.unreachable, st.bellsRung, st.lateArrivals);
+        std::printf("%.2f s wall; path builds %d, events %lld, door passes %lld, elevator journeys %lld (%lld boarded in detail), unstuck %lld, unreachable %d, bells %d, late arrivals %.0f\n", secs,
+                    st.pathBuilds, st.events, st.doorPasses, st.elevatorJourneys, st.elevatorRides, st.unstuck, st.unreachable, st.bellsRung, st.lateArrivals);
         if (check && (st.unreachable > 0)) status = 1;
     }
     return status;

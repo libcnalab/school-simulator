@@ -163,6 +163,11 @@ bool SchoolSim::BuildJourney(int npc, RoomId startRoom, Vec3 startPos, const Goa
         for (const Vec2& p : l.PathTo(entry, spot)) pts.push_back({Vec3(p, last.pos.y), endRoom, kNone, WaypointKind::Walk});
         pts.push_back(last);
     }
+    for (const Waypoint& w : pts)
+        if (w.kind == WaypointKind::Ride) {
+            ++stats_.elevatorJourneys;
+            break;
+        }
     auto journey = std::make_unique<Journey>();
     journey->pts = std::move(pts);
     journey->cum.assign(journey->pts.size(), 0.0f);
