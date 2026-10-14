@@ -520,7 +520,11 @@ Goal SchoolSim::GoalFor(const Npc& npc, int phase, int sub, double& departOffset
         case PhaseKind::Arrival: {
             departOffset = dur * 0.62 * static_cast<double>(u);
             const Lesson* first = LessonOf(npc, 1);
-            if (u < 0.6f && first != nullptr) return SeatGoal(npc, g, *first, 0);                  // straight to the first lesson's room
+            if (u < 0.55f && first != nullptr) return SeatGoal(npc, g, *first, 0);                  // straight to the first lesson's room
+            if (u < 0.70f) {                                                                       // a visit to the lockers first
+                const std::vector<RoomId> lockers = plan_.RoomsOfType(RoomType::LockerHall);
+                if (!lockers.empty()) return IdleGoal(lockers[static_cast<std::size_t>(H(salt, static_cast<std::uint64_t>(npc.classId), 13) % lockers.size())], npc, salt);
+            }
             if (settings_.badWeather) return IdleGoal(plan_.mainLobby, npc, salt);
             return OutdoorBreakGoal(npc, salt);
         }

@@ -693,6 +693,11 @@ void Gen::Outdoor()
             out.fixtures.push_back({FixtureType::TreeTrunk, {x + 6.0f, r.Center().z + 8.0f}, 0, 0.5f, 5.0f, 0.5f, 0, kGreen, true});
             out.fixtures.push_back({FixtureType::Bench, {x, r.Center().z - 3.0f}, 0, 1.8f, 0.45f, 0.5f, YawOfX({1, 0}), kWood, true});
             out.fixtures.push_back({FixtureType::Bench, {x + 6.0f, r.Center().z + 11.0f}, 0, 1.8f, 0.45f, 0.5f, YawOfX({1, 0}), kWood, true});
+            // Two sitters per bench, facing away from the trees behind them.
+            for (const float du : {-0.45f, 0.45f}) {
+                out.idle.push_back({{x + du, r.Center().z - 3.0f}, YawOf({0, 1}), SpotKind::Stand, Pose::Sit});
+                out.idle.push_back({{x + 6.0f + du, r.Center().z + 11.0f}, YawOf({0, -1}), SpotKind::Stand, Pose::Sit});
+            }
         }
         Idle(5.0f, 3.0f);
         break;
@@ -820,7 +825,11 @@ void Gen::Run()
         Fix(FixtureType::Counter, W * 0.5f, D * 0.5f, 5.0f, 1.05f, 1.0f, AlongU(), kDark);
         out.work.push_back(MakeSpot(W * 0.5f - 1.0f, D * 0.5f + 0.9f, YawLocal(0, -1), SpotKind::Work, Pose::Work));
         out.work.push_back(MakeSpot(W * 0.5f + 1.0f, D * 0.5f + 0.9f, YawLocal(0, -1), SpotKind::Work, Pose::Work));
-        for (int i = 0; i < 4; ++i) Fix(FixtureType::Bench, 4.0f + (W - 8.0f) * (static_cast<float>(i) + 0.5f) / 4.0f, D - 0.5f, 2.2f, 0.45f, 0.5f, AlongU(), kBlue);
+        for (int i = 0; i < 4; ++i) {
+            const float u = 4.0f + (W - 8.0f) * (static_cast<float>(i) + 0.5f) / 4.0f;
+            Fix(FixtureType::Bench, u, D - 0.5f, 2.2f, 0.45f, 0.5f, AlongU(), kBlue);
+            for (const float du : {-0.6f, 0.0f, 0.6f}) out.idle.push_back(MakeSpot(u + du, D - 0.5f, DoorYaw(), SpotKind::Stand, Pose::Sit));
+        }
         Fix(FixtureType::Plant, 2.0f, D * 0.5f, 0.7f, 1.6f, 0.7f, 0.0f, kGreen, false);
         Fix(FixtureType::Plant, W - 2.0f, D * 0.5f, 0.7f, 1.6f, 0.7f, 0.0f, kGreen, false);
         Idle(3.0f, 1.5f);

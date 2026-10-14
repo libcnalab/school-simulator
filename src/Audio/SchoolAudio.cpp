@@ -42,6 +42,12 @@ const char* SchoolAudio::AmbienceFor(const Room& room, const School::SchoolSim& 
         baseVolume = 0.5f;
         radius = 30.0f;
         return "music";
+    case RoomType::Auditorium:
+    case RoomType::DramaStudio:
+        if (people < 6) return nullptr;
+        baseVolume = std::min(0.6f, 0.15f + static_cast<float>(people) * 0.01f);
+        radius = 45.0f;
+        return room.type == RoomType::Auditorium ? "music" : "classroom";
     case RoomType::Workshop:
     case RoomType::Boiler:
         baseVolume = room.type == RoomType::Boiler ? 0.6f : (people > 2 ? 0.5f : 0.0f);
