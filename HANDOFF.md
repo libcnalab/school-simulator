@@ -15,10 +15,10 @@ Working notes for whoever continues (human or agent). Dates are when something w
   occupancy (light switches beside the doors override them); door plates, wing signs, floor indicators,
   computer-lab desktops, diagnostics monitors, art still life, locker and toilet visits, people sitting on
   benches, trophy cabinets, elevator chime, F12 screenshots.
-- **Wayland** (reported by the owner 2026-10-14): CNA refused to start because it could not centre the window.
-  Fixed in the CNA working tree (`Sdl3Window::CenterOnDisplay` is best-effort) but NOT committed there: that
-  function is another agent's uncommitted work. If the fix is lost, re-apply it or run under XWayland
-  (`SDL_VIDEO_DRIVER=x11`). `tools/soak.sh -p extreme -n 6`: memory flat at
+- **Wayland** (reported by the owner 2026-10-14): CNA refused to start because it could not centre the window
+  (`cannot position non-popup windows`). `Sdl3Window::CenterOnDisplay` is best-effort now; the fix went into CNA
+  with commit `96522bf34` on branch `next` (the other agent's re-centring change). Not yet confirmed on the
+  owner's Wayland session after a rebuild; fallback is `SDL_VIDEO_DRIVER=x11` (XWayland). `tools/soak.sh -p extreme -n 6`: memory flat at
   307 MB, nobody stuck. `tools/determinism.sh` passes.
 - Elevators (2026-10-14): two shafts (east and west wings, levels 1-4) with cabs, calls, capacity 8, boarding
   and alighting at full fidelity, timed rides for abstract walkers, the player can ride (call button, cab
