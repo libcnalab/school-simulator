@@ -340,6 +340,15 @@ void SchoolGame::HandleSystemKeys()
     }
     if (input_.Pressed(Keys::M)) showMinimap_ = !showMinimap_;
     if (input_.Pressed(Keys::F2)) audio_->SetMuted(!audio_->Muted());
+    if (input_.Pressed(Keys::F12)) {
+        static int shotIndex = 0;
+        char name[64];
+        std::snprintf(name, sizeof name, "school-%s-%03d.png", School::ClockText(sim_->Time()).c_str(), ++shotIndex);
+        for (char& ch : name)
+            if (ch == ':') ch = '.';
+        pendingShot_ = name;
+        hud_->Toast(std::string("Screenshot ") + name, 2.0f);
+    }
     if (input_.Pressed(Keys::F11)) {
         graphics_.ToggleFullScreen();
         const auto& vp = getGraphicsDeviceProperty().getViewportProperty();
@@ -573,6 +582,10 @@ void SchoolGame::UpdateInteractables()
                     const auto& cams = screens_->Cameras();
                     if (!cams.empty()) hud_->Toast("CCTV: " + cams[0].name + " and the next three", 2.0f);
                 };
+                interaction_.Add(std::move(it));
+            } else if (f.type == School::FixtureType::Vending && r.type == RoomType::Lobby) {
+                it.prompt = "Trophy cabinet";
+                it.activate = [this] { hud_->Toast("Regional champions in basketball, chess and debating, and a very old football.", 4.0f); };
                 interaction_.Add(std::move(it));
             } else if (f.type == School::FixtureType::Vending) {
                 it.prompt = "Buy a snack";

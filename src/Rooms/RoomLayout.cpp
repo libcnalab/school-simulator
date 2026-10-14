@@ -838,6 +838,11 @@ void Gen::Run()
         }
         Fix(FixtureType::Plant, 2.0f, D * 0.5f, 0.7f, 1.6f, 0.7f, 0.0f, kGreen, false);
         Fix(FixtureType::Plant, W - 2.0f, D * 0.5f, 0.7f, 1.6f, 0.7f, 0.0f, kGreen, false);
+        // Trophy cabinets along both side walls (a Vending fixture draws as a cabinet with a glass front).
+        for (const float v : {D * 0.3f, D * 0.7f}) {
+            Fix(FixtureType::Vending, 0.4f, v, 1.8f, 2.0f, 0.6f, YawLocal(1, 0), kLight);
+            Fix(FixtureType::Vending, W - 0.4f, v, 1.8f, 2.0f, 0.6f, YawLocal(-1, 0), kLight);
+        }
         Idle(3.0f, 1.5f);
         break;
     }

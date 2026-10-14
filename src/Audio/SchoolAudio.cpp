@@ -84,6 +84,7 @@ void SchoolAudio::Update(float dt, const Vector3& listener, const Vector3& forwa
         ++doorSounds;
         const char* name = def.kind == School::DoorKind::Automatic || def.kind == School::DoorKind::ElevatorDoor ? "door_slide" : (d.opening ? "door_open" : "door_close");
         audio_.PlayAt(name, at, def.kind == School::DoorKind::External ? 0.7f : 0.45f, 22.0f);
+        if (def.kind == School::DoorKind::ElevatorDoor && d.opening) audio_.PlayAt("chime", at, 0.5f, 18.0f);   // the cab has arrived
     }
     // Room ambiences: rescan a few times a second.
     scanTimer_ += dt;
