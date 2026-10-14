@@ -235,6 +235,8 @@ void SchoolGame::PlaceInRoom(RoomId id)
     const Room& r = plan_.room(id);
     const School::RoomLayout& l = layouts_->Get(id);
     School::Vec2 at = l.aisles.valid ? l.hub : r.rect.Center();
+    // A couple of metres into the room, so the first view shows the room and not the door wall behind.
+    at = at + School::SideNormal(l.doorSide) * -std::min(2.5f, 0.2f * std::min(r.rect.Width(), r.rect.Depth()));
     at = r.rect.Clamp(at, 0.8f);
     // face away from the door wall; in a corridor, along it
     School::Vec2 away = School::SideNormal(l.doorSide) * -1.0f;

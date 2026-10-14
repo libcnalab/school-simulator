@@ -41,7 +41,7 @@ stop() {
 }
 
 stop entrance   07:55 "look:0,0"
-stop lobby      08:05 "goto:Main lobby;look:180,5"
+stop lobby      08:05 "goto:Main lobby"
 stop classroom  08:10 "busiest:Classroom"
 stop physics    09:20 "busiest:Physics lab"
 stop computers  10:00 "busiest:Computer lab"
