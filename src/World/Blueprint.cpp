@@ -743,13 +743,22 @@ SchoolPlan BuildSchoolPlan(const PlanOptions& /*options*/)
         b.PlaceDoor(r.id, towards, towards == Side::South ? r.rect.Center().x : r.rect.Center().z, DoorKind::Double, 2.4f, courtyard, true);
     }
 
-    // Stair towers and mid-wing stairwells have an outside door on the ground floor where there is outdoors beside them.
+    // Stair towers and mid-wing stairwells have an outside door on the ground floor where there is outdoors beside
+    // them: in a side wall, at the entry landing (the rest of the shaft is flights and the open well).
     for (const Room& r : std::vector<Room>(b.plan.rooms)) {
         if (r.type != RoomType::StairWell || r.level != kGround) continue;
+        const StairShaft& shaft = b.plan.stairs[static_cast<std::size_t>(r.stairId)];
+        const float landing = shaft.entryDepth * 0.5f;
         for (const Side side : {Side::North, Side::South, Side::West, Side::East}) {
-            if (side == b.plan.stairs[static_cast<std::size_t>(r.stairId)].entrySide) continue;
-            const bool alongX = side == Side::North || side == Side::South;
-            b.PlaceDoor(r.id, side, alongX ? r.rect.Center().x : r.rect.Center().z, DoorKind::External, 1.8f, kNone, true, true);
+            if (side == shaft.entrySide || side == Opposite(shaft.entrySide)) continue;
+            float along;
+            switch (shaft.entrySide) {
+            case Side::South: along = r.rect.z1 - landing; break;
+            case Side::North: along = r.rect.z0 + landing; break;
+            case Side::West: along = r.rect.x0 + landing; break;
+            default: along = r.rect.x1 - landing; break;
+            }
+            b.PlaceDoor(r.id, side, along, DoorKind::External, 1.6f, kNone, true, true);
         }
     }
 
@@ -780,9 +789,9 @@ SchoolPlan BuildSchoolPlan(const PlanOptions& /*options*/)
     b.PlaceDoor(library, Side::South, 175.0f, DoorKind::External, 2.2f, eastYard, true);
     b.PlaceDoor(library, Side::South, 190.0f, DoorKind::External, 2.2f, eastYard, true);
     b.PlaceDoor(musicHall, Side::West, 70.0f, DoorKind::Double, 2.0f);
-    b.PlaceDoor(musicHall, Side::East, 70.0f, DoorKind::External, 2.0f, eastLawn, true);
+    b.PlaceDoor(musicHall, Side::East, 62.0f, DoorKind::External, 2.0f, eastLawn, true);
     b.PlaceDoor(dance, Side::West, 98.0f, DoorKind::Double, 2.0f);
-    b.PlaceDoor(dance, Side::East, 98.0f, DoorKind::External, 2.0f, eastLawn, true);
+    b.PlaceDoor(dance, Side::South, 208.0f, DoorKind::External, 2.0f, eastYard, true);
 
     b.BuildStairSurfaces();
     (void)trackN; (void)trackS; (void)trackW; (void)trackE; (void)field; (void)playground; (void)westLawn; (void)northPlaza;

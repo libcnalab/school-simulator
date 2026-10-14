@@ -298,8 +298,10 @@ void Gen::Workshop()
             }
         }
     }
-    for (int i = 0; i < 4; ++i) Fix(FixtureType::Machine, 0.6f, 3.0f + 2.4f * static_cast<float>(i), 0.9f, 1.3f, 1.2f, AlongV(), kRed);
-    for (int i = 0; i < 3; ++i) Fix(FixtureType::Machine, W - 0.7f, 3.5f + 3.0f * static_cast<float>(i), 1.0f, 1.2f, 1.4f, AlongV(), kGreen);
+    for (int i = 0; i < 4; ++i)
+        if (3.0f + 2.4f * static_cast<float>(i) < D - 1.0f) Fix(FixtureType::Machine, 0.6f, 3.0f + 2.4f * static_cast<float>(i), 0.9f, 1.3f, 1.2f, AlongV(), kRed);
+    for (int i = 0; i < 3; ++i)
+        if (3.5f + 3.0f * static_cast<float>(i) < D - 1.0f) Fix(FixtureType::Machine, W - 0.7f, 3.5f + 3.0f * static_cast<float>(i), 1.0f, 1.2f, 1.4f, AlongV(), kGreen);
 }
 
 void Gen::Gym()
@@ -389,7 +391,7 @@ void Gen::Auditorium()
     SetAisles(0.8f, W - 0.8f, 1.5f);
     // Stage along the far wall; a projection screen above it.
     const float stageDepth = std::min(7.0f, D * 0.2f);
-    Fix(FixtureType::Stage, W * 0.5f, D - stageDepth * 0.5f, W - 1.0f, 1.0f, stageDepth, 0.0f, kDark);
+    Fix(FixtureType::Stage, W * 0.5f, D - stageDepth * 0.5f, W - 1.0f, 1.0f, stageDepth, AlongU(), kDark);
     Fix(FixtureType::Screen, W * 0.5f, D - 0.1f, std::min(12.0f, W - 6.0f), 5.0f, 0.1f, YawLocal(0, -1), kWhite, false, 3.5f);
     out.teacher.push_back(MakeSpot(W * 0.5f, D - stageDepth * 0.5f, DoorYaw(), SpotKind::Teacher, Pose::Lecture));
     out.teacher.back().pos = f_.At(W * 0.5f, D - stageDepth * 0.5f);
@@ -625,7 +627,7 @@ void Gen::Drama()
 {
     const float W = f_.W, D = f_.D;
     SetAisles(0.7f, W - 0.7f, 1.2f);
-    Fix(FixtureType::Stage, W * 0.5f, D - 2.0f, W - 2.0f, 0.5f, 3.6f, 0.0f, kDark);
+    Fix(FixtureType::Stage, W * 0.5f, D - 2.0f, W - 2.0f, 0.5f, 3.6f, AlongU(), kDark);
     WallBoard(std::min(W - 3.0f, 4.0f));
     out.teacher.push_back(MakeSpot(W * 0.5f, D - 1.8f, DoorYaw(), SpotKind::Teacher, Pose::Lecture));
     out.work.push_back(MakeSpot(1.2f, D - 1.0f, DoorYaw(), SpotKind::Work, Pose::Work));
@@ -830,7 +832,33 @@ RoomLayout BuildRoomLayout(const SchoolPlan& plan, RoomId room)
 {
     Gen g(plan, plan.room(room));
     g.Run();
-    return std::move(g.out);
+    RoomLayout& out = g.out;
+    // Nothing stands in front of a door: a clearance zone behind every door of the room is cleared of
+    // furniture and of the places people occupy, whatever the generator put there.
+    const Room& r = plan.room(room);
+    std::vector<Rect> zones;
+    for (const DoorId did : r.doors) {
+        const Door& d = plan.door(did);
+        const Side side = d.a == room ? d.sideOfA : Opposite(d.sideOfA);
+        const Vec2 inward = SideNormal(side) * -1.0f;
+        const Vec2 along = inward.RightHand();
+        const float half = d.width * 0.5f + 0.45f;
+        const float depth = 1.2f;
+        const Vec2 a = d.pos - along * half, b = d.pos + along * half + inward * depth;
+        zones.push_back({std::min(a.x, b.x), std::min(a.z, b.z), std::max(a.x, b.x), std::max(a.z, b.z)});
+    }
+    const auto inZone = [&](Vec2 p, float radius) {
+        for (const Rect& z : zones)
+            if (z.Contains(p, radius)) return true;
+        return false;
+    };
+    std::erase_if(out.fixtures, [&](const Fixture& f) {
+        if (f.type == FixtureType::Whiteboard || f.type == FixtureType::Screen) return inZone(f.pos, f.sx * 0.5f);   // wall-mounted: only its width matters
+        return inZone(f.pos, std::max(f.sx, f.sz) * 0.5f);
+    });
+    for (std::vector<Spot>* list : {&out.seats, &out.teacher, &out.work, &out.idle, &out.queue, &out.eat, &out.browse})
+        std::erase_if(*list, [&](const Spot& sp) { return inZone(sp.pos, 0.1f); });
+    return std::move(out);
 }
 
 // --- aisle paths -------------------------------------------------------------------------------------------------------

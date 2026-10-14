@@ -149,6 +149,7 @@ void SchoolGame::LoadContent()
     weather_ = std::make_unique<Weather>(services_);
     weather_->SetKind(options_.weather);
     screens_ = std::make_unique<Screens>(services_, plan_, *layouts_);
+    roomEffects_ = std::make_unique<RoomEffects>(services_, plan_, *layouts_);
     collision_ = std::make_unique<CollisionWorld>(plan_, *layouts_);
     gizmos_ = std::make_unique<Gizmos>(services_);
     hud_ = std::make_unique<Hud>(services_);
@@ -190,6 +191,7 @@ void SchoolGame::UnloadContent()
     minimap_.reset();
     hud_.reset();
     gizmos_.reset();
+    roomEffects_.reset();
     screens_.reset();
     weather_.reset();
     npcs_.reset();
@@ -623,6 +625,7 @@ void SchoolGame::Update(GameTime& gameTime)
             const bool out = currentRoom_ == School::kNone || !plan_.room(currentRoom_).Indoor();
             weather_->Update(dt, camera_.Position(), out, player_->Feet().Y);
         }
+        roomEffects_->Update(dt, camera_.Position(), *world_);
         // Doors open for the player as they do for everybody else.
         const Vector3 feet = player_->Feet();
         if (currentRoom_ != School::kNone)
@@ -792,6 +795,7 @@ void SchoolGame::Draw(const GameTime& gameTime)
     stage("world", [&] { world_->Draw(ctx, light, sim_->Doors()); });
     stage("people", [&] { npcs_->Draw(ctx, *sim_, *world_, npcStats_); });
     stage("screens", [&] { screens_->Draw(ctx, *sim_, *world_); });
+    stage("room effects", [&] { roomEffects_->Draw(ctx); });
     stage("weather", [&] { weather_->Draw(ctx); });
     stage("debug", [&] { DrawDebug(ctx); });
     effects_->World().setFogEnabledProperty(false);
@@ -933,6 +937,34 @@ void SchoolGame::RunScript()
                 School::Log("script", "busiest %s: %s with %d people", arg.c_str(), plan_.room(best).name.c_str(), count[static_cast<std::size_t>(best)]);
             } else {
                 School::Log("script", "busiest: no room of type '%s'", arg.c_str());
+            }
+        } else if (op == "atdoor") {
+            // atdoor:CODE[,N]  stand two metres outside the N-th door of a room (default: the first with a leaf), facing it
+            std::string code = arg;
+            int which = 0;
+            if (const std::size_t comma = arg.find(','); comma != std::string::npos) {
+                code = arg.substr(0, comma);
+                which = std::atoi(arg.c_str() + comma + 1);
+            }
+            RoomId room = School::kNone;
+            for (const Room& r : plan_.rooms)
+                if (r.code == code) room = r.id;
+            if (room == School::kNone) {
+                School::Log("script", "atdoor: unknown room '%s'", code.c_str());
+            } else {
+                int seen = 0;
+                for (const School::DoorId did : plan_.room(room).doors) {
+                    const School::Door& d = plan_.door(did);
+                    if (!d.Leaf() || seen++ != which) continue;
+                    School::Vec2 n = d.Normal();
+                    if (d.a != room) n = n * -1.0f;   // from the room outwards
+                    const School::Vec2 at = d.pos + n * 2.0f;
+                    const float yaw = std::atan2(n.x, n.z);   // facing -n
+                    player_->Place(Vector3(at.x, plan_.FloorY(d.level), at.z), yaw, 0.0f, camera_);
+                    world_->Ensure(room);
+                    world_->Ensure(d.Other(room));
+                    break;
+                }
             }
         } else if (op == "pos") {
             float x = 0, y = 0, z = 0;

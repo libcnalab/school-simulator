@@ -121,6 +121,11 @@ if(SCHOOL_BUILD_APP)
         endforeach()
     endif()
 
+    # Tests of the application half that need no device (geometry, collision, looks).
+    add_executable(school_app_tests tests/app_tests.cpp)
+    target_link_libraries(school_app_tests PRIVATE school_app)
+    add_test(NAME school_app COMMAND school_app_tests)
+
     add_executable(cna-school-simulator src/Main.cpp)
     target_link_libraries(cna-school-simulator PRIVATE school_app)
     if(TARGET SDL3::SDL3main)

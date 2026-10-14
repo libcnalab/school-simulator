@@ -24,6 +24,7 @@
 #include "Rendering/Gizmos.hpp"
 #include "Rendering/LitMesh.hpp"
 #include "Rendering/NpcRenderer.hpp"
+#include "Rendering/RoomEffects.hpp"
 #include "Rendering/Screens.hpp"
 #include "Rendering/SkyDome.hpp"
 #include "Rendering/TextureLibrary.hpp"
@@ -92,6 +93,7 @@ private:
     std::unique_ptr<NpcRenderer> npcs_;
     std::unique_ptr<Weather> weather_;
     std::unique_ptr<Screens> screens_;
+    std::unique_ptr<RoomEffects> roomEffects_;
     std::unique_ptr<CollisionWorld> collision_;
     std::unique_ptr<Gizmos> gizmos_;
     std::unique_ptr<Hud> hud_;

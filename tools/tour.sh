@@ -30,7 +30,7 @@ stop() {
   local name=$1 time=$2 script=$3
   shift 3
   local log="$out/$name.log"
-  if ! timeout 300 xvfb-run -a -s "-screen 0 1280x720x24" "${env_renderer[@]}" "$bin" --no-audio --preset "$preset" --time "$time" "$@" \
+  if ! timeout "${SCHOOL_TIMEOUT:-300}" xvfb-run -a -s "-screen 0 1280x720x24" "${env_renderer[@]}" "$bin" --no-audio --preset "$preset" --time "$time" "$@" \
        --script "wait:5;$script;wait:45;shot:$out/$name.png;wait:3;stats;quit" > "$log" 2>&1; then
     echo "FAILED  $name (see $log)"; status=1
   elif grep -q "draw-error" "$log"; then

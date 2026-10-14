@@ -1,0 +1,221 @@
+#include "Rendering/RoomEffects.hpp"
+
+#include <algorithm>
+#include <cmath>
+
+#include "Microsoft/Xna/Framework/Graphics/BasicEffect.hpp"
+#include "Microsoft/Xna/Framework/Graphics/BlendState.hpp"
+#include "Microsoft/Xna/Framework/Graphics/DepthStencilState.hpp"
+#include "Microsoft/Xna/Framework/Graphics/DirectionalLight.hpp"
+#include "Microsoft/Xna/Framework/MathHelper.hpp"
+#include "Rendering/EffectBank.hpp"
+#include "Rendering/LitMesh.hpp"
+#include "Rendering/RenderStates.hpp"
+#include "World/Rng.hpp"
+
+using namespace Microsoft::Xna::Framework;
+using namespace Microsoft::Xna::Framework::Graphics;
+using School::Fixture;
+using School::FixtureType;
+using School::Room;
+using School::RoomType;
+
+namespace {
+
+bool Animated(RoomType t)
+{
+    return t == RoomType::PhysicsLab || t == RoomType::ChemistryLab || t == RoomType::BiologyLab || t == RoomType::Workshop || t == RoomType::Gym;
+}
+
+/** World transform of a fixture's local frame (origin at its base centre). */
+Matrix FixtureFrame(const Fixture& f, float baseY)
+{
+    return Matrix::CreateRotationY(f.yaw) * Matrix::CreateTranslation(f.pos.x, baseY + f.y0, f.pos.z);
+}
+
+const Fixture* FirstOf(const School::RoomLayout& l, FixtureType t)
+{
+    for (const Fixture& f : l.fixtures)
+        if (f.type == t) return &f;
+    return nullptr;
+}
+
+}  // namespace
+
+void RoomEffects::Update(float dt, const Vector3& eye, const WorldRenderer& world)
+{
+    // Rooms in range keep a state; the others are forgotten (and start afresh when they come back).
+    std::map<int, RoomState> next;
+    for (const School::RoomId id : world.LoadedRooms()) {
+        const Room& r = plan_.room(id);
+        if (!Animated(r.type)) continue;
+        const School::Vec2 c = r.rect.Clamp(School::Vec2{eye.X, eye.Z});
+        const float dx = c.x - eye.X, dz = c.z - eye.Z, dy = plan_.FloorY(r.level) - eye.Y;
+        if (dx * dx + dz * dz + dy * dy > range_ * range_) continue;
+        auto it = active_.find(id);
+        RoomState st = it != active_.end() ? std::move(it->second) : RoomState{};
+        st.room = id;
+        st.time += dt;
+        if (r.type == RoomType::Gym && st.balls.empty()) {
+            School::Rng rng(School::Hash(static_cast<std::uint64_t>(id), 0xBA11));
+            for (int i = 0; i < 4; ++i) {
+                Ball b;
+                b.pos = Vector3(r.rect.x0 + r.rect.Width() * rng.Range(0.3f, 0.7f), plan_.FloorY(r.level) + rng.Range(1.0f, 3.0f), r.rect.z0 + r.rect.Depth() * rng.Range(0.3f, 0.7f));
+                b.vel = Vector3(rng.Range(-2.0f, 2.0f), 0.0f, rng.Range(-2.0f, 2.0f));
+                st.balls.push_back(b);
+            }
+        }
+        if (r.type == RoomType::Gym) {
+            const float floor = plan_.FloorY(r.level) + 0.12f;
+            for (Ball& b : st.balls) {
+                b.vel.Y -= 9.81f * dt;
+                b.pos += b.vel * dt;
+                if (b.pos.Y < floor) {
+                    b.pos.Y = floor;
+                    b.vel.Y = std::fabs(b.vel.Y) * 0.78f + 0.4f;   // a little energy back in: the balls never stop
+                    b.vel.X *= 0.98f;
+                    b.vel.Z *= 0.98f;
+                }
+                if (b.pos.X < r.rect.x0 + 1.0f || b.pos.X > r.rect.x1 - 1.0f) b.vel.X = -b.vel.X;
+                if (b.pos.Z < r.rect.z0 + 1.0f || b.pos.Z > r.rect.z1 - 1.0f) b.vel.Z = -b.vel.Z;
+                b.pos.X = std::clamp(b.pos.X, r.rect.x0 + 1.0f, r.rect.x1 - 1.0f);
+                b.pos.Z = std::clamp(b.pos.Z, r.rect.z0 + 1.0f, r.rect.z1 - 1.0f);
+            }
+        }
+        next[id] = std::move(st);
+    }
+    active_ = std::move(next);
+}
+
+void RoomEffects::DrawShape(const DrawContext& ctx, const LitMesh& mesh, const Matrix& world, const Vector3& colour, float alpha)
+{
+    BasicEffect& lit = ctx.fx.Lit();
+    lit.setWorldProperty(world);
+    lit.setDiffuseColorProperty(colour);
+    lit.setAlphaProperty(alpha);
+    EffectBank::Apply(lit);
+    mesh.Draw(ctx.device);
+}
+
+void RoomEffects::DrawLab(const DrawContext& ctx, const Room& r, RoomState& st)
+{
+    const School::RoomLayout& l = layouts_.Get(r.id);
+    const Fixture* bench = FirstOf(l, FixtureType::LabBench);
+    if (bench == nullptr) return;
+    const float y0 = plan_.FloorY(r.level);
+    const Matrix frame = FixtureFrame(*bench, y0);
+    const float top = bench->sy;
+    const float t = st.time;
+    const Shapes& sh = *s_.shapes;
+    const Vector3 metal(0.75f, 0.76f, 0.8f);
+    if (r.type == RoomType::PhysicsLab) {
+        // A pendulum on a stand at one end of the bench.
+        const Vector3 pivot(-bench->sx * 0.3f, top + 0.9f, 0.0f);
+        DrawShape(ctx, sh.Cylinder(), Matrix::CreateScale(0.03f, 0.9f, 0.03f) * Matrix::CreateTranslation(pivot.X + 0.25f, top, pivot.Z) * frame, metal);
+        DrawShape(ctx, sh.Cube(), Matrix::CreateScale(0.3f, 0.02f, 0.02f) * Matrix::CreateTranslation(pivot.X + 0.1f, pivot.Y, pivot.Z) * frame, metal);
+        const float angle = 0.75f * std::sin(t * 2.4f);
+        const float len = 0.7f;
+        const Matrix swing = Matrix::CreateRotationZ(angle) * Matrix::CreateTranslation(pivot) * frame;
+        DrawShape(ctx, sh.Cylinder(), Matrix::CreateScale(0.012f, len, 0.012f) * Matrix::CreateTranslation(0, -len, 0) * swing, Vector3(0.3f, 0.3f, 0.3f));
+        DrawShape(ctx, sh.Sphere(), Matrix::CreateScale(0.12f) * Matrix::CreateTranslation(0, -len, 0) * swing, Vector3(0.85f, 0.2f, 0.15f));
+        // A launched ball: a parabola from the other end of the bench, every three seconds.
+        const float period = 3.0f;
+        const float u = std::fmod(t, period);
+        const float v0 = 3.2f;
+        const float x = bench->sx * 0.3f - u * 1.4f;
+        const float y = top + 0.25f + v0 * u - 0.5f * 9.81f * u * u;
+        if (y > top + 0.05f) DrawShape(ctx, sh.Sphere(), Matrix::CreateScale(0.08f) * Matrix::CreateTranslation(x, y, 0.15f) * frame, Vector3(0.2f, 0.4f, 0.9f));
+        DrawShape(ctx, sh.Cube(), Matrix::CreateScale(0.25f, 0.2f, 0.25f) * Matrix::CreateTranslation(bench->sx * 0.3f, top + 0.1f, 0.15f) * frame, Vector3(0.35f, 0.35f, 0.4f));
+    } else if (r.type == RoomType::ChemistryLab) {
+        // Three flasks with coloured liquid and rising bubbles.
+        static const Vector3 kLiquids[] = {Vector3(0.2f, 0.8f, 0.4f), Vector3(0.9f, 0.5f, 0.1f), Vector3(0.3f, 0.4f, 1.0f)};
+        for (int i = 0; i < 3; ++i) {
+            const float x = (static_cast<float>(i) - 1.0f) * 0.45f;
+            DrawShape(ctx, sh.Cylinder(), Matrix::CreateScale(0.16f, 0.22f, 0.16f) * Matrix::CreateTranslation(x, top, 0.0f) * frame, Vector3(0.85f, 0.9f, 0.95f), 0.35f);
+            DrawShape(ctx, sh.Cylinder(), Matrix::CreateScale(0.14f, 0.14f, 0.14f) * Matrix::CreateTranslation(x, top + 0.005f, 0.0f) * frame, kLiquids[i]);
+            DrawShape(ctx, sh.Cylinder(), Matrix::CreateScale(0.06f, 0.12f, 0.06f) * Matrix::CreateTranslation(x, top + 0.22f, 0.0f) * frame, Vector3(0.85f, 0.9f, 0.95f), 0.35f);
+            for (int b = 0; b < 4; ++b) {
+                const float phase = std::fmod(t * (0.6f + 0.15f * static_cast<float>(b)) + static_cast<float>(b) * 0.37f + static_cast<float>(i) * 0.5f, 1.0f);
+                const float bx = x + 0.05f * std::sin(phase * 12.0f + static_cast<float>(b));
+                DrawShape(ctx, sh.Sphere(), Matrix::CreateScale(0.02f + 0.015f * phase) * Matrix::CreateTranslation(bx, top + 0.03f + phase * 0.3f, 0.0f) * frame, Vector3(1, 1, 1), 0.7f);
+            }
+        }
+        // a slow vapour wisp above the middle flask
+        const float wisp = std::fmod(t * 0.3f, 1.0f);
+        DrawShape(ctx, sh.Sphere(), Matrix::CreateScale(0.1f + 0.2f * wisp) * Matrix::CreateTranslation(0.0f, top + 0.4f + wisp * 0.6f, 0.0f) * frame, Vector3(0.9f, 0.95f, 1.0f), 0.25f * (1.0f - wisp));
+    } else {
+        // Biology: a turning double helix on a stand.
+        const float turn = t * 0.8f;
+        DrawShape(ctx, sh.Cylinder(), Matrix::CreateScale(0.3f, 0.03f, 0.3f) * Matrix::CreateTranslation(0.0f, top, 0.0f) * frame, Vector3(0.25f, 0.25f, 0.28f));
+        for (int k = 0; k < 14; ++k) {
+            const float h = top + 0.08f + static_cast<float>(k) * 0.065f;
+            const float a = turn + static_cast<float>(k) * 0.55f;
+            const Vector3 p1(std::cos(a) * 0.14f, h, std::sin(a) * 0.14f);
+            const Vector3 p2(-p1.X, h, -p1.Z);
+            DrawShape(ctx, sh.Sphere(), Matrix::CreateScale(0.045f) * Matrix::CreateTranslation(p1) * frame, Vector3(0.9f, 0.3f, 0.3f));
+            DrawShape(ctx, sh.Sphere(), Matrix::CreateScale(0.045f) * Matrix::CreateTranslation(p2) * frame, Vector3(0.3f, 0.5f, 0.95f));
+            DrawShape(ctx, sh.Cube(), Matrix::CreateScale(0.26f, 0.012f, 0.012f) * Matrix::CreateRotationY(-a) * Matrix::CreateTranslation(0, h, 0) * frame, Vector3(0.8f, 0.8f, 0.6f));
+        }
+    }
+}
+
+void RoomEffects::DrawWorkshop(const DrawContext& ctx, const Room& r, RoomState& st)
+{
+    const School::RoomLayout& l = layouts_.Get(r.id);
+    const float y0 = plan_.FloorY(r.level);
+    const Shapes& sh = *s_.shapes;
+    int i = 0;
+    for (const Fixture& f : l.fixtures) {
+        if (f.type != FixtureType::Machine) continue;
+        const Matrix frame = FixtureFrame(f, y0);
+        const float phase = st.time * (3.0f + static_cast<float>(i % 3)) + static_cast<float>(i);
+        // a spinning wheel on the drum and a piston going up and down beside it
+        const float hx = f.sx * 0.5f;
+        DrawShape(ctx, sh.Cube(), Matrix::CreateScale(0.26f, 0.03f, 0.03f) * Matrix::CreateRotationY(phase) * Matrix::CreateTranslation(hx * 0.2f, f.sy + 0.09f, 0.0f) * frame, Vector3(0.85f, 0.75f, 0.2f));
+        DrawShape(ctx, sh.Cube(), Matrix::CreateScale(0.03f, 0.03f, 0.26f) * Matrix::CreateRotationY(phase) * Matrix::CreateTranslation(hx * 0.2f, f.sy + 0.09f, 0.0f) * frame, Vector3(0.85f, 0.75f, 0.2f));
+        const float stroke = 0.08f * (0.5f + 0.5f * std::sin(phase * 2.0f));
+        DrawShape(ctx, sh.Cylinder(), Matrix::CreateScale(0.08f, 0.18f, 0.08f) * Matrix::CreateTranslation(-hx * 0.4f, f.sy * 0.65f + stroke, 0.0f) * frame, Vector3(0.7f, 0.72f, 0.75f));
+        ++i;
+    }
+}
+
+void RoomEffects::DrawGym(const DrawContext& ctx, const Room&, RoomState& st)
+{
+    const Shapes& sh = *s_.shapes;
+    for (const Ball& b : st.balls) DrawShape(ctx, sh.Sphere(), Matrix::CreateScale(0.24f) * Matrix::CreateTranslation(b.pos), Vector3(0.9f, 0.45f, 0.15f));
+}
+
+void RoomEffects::Draw(const DrawContext& ctx)
+{
+    if (active_.empty()) return;
+    RenderStates::SetOpaque3D(ctx.device);
+    BasicEffect& lit = ctx.fx.BeginLit(nullptr);
+    lit.setViewProperty(ctx.view.view);
+    lit.setProjectionProperty(ctx.view.projection);
+    lit.setAmbientLightColorProperty(Vector3(0.4f, 0.4f, 0.45f));
+    lit.setSpecularColorProperty(Vector3(0.25f, 0.25f, 0.25f));
+    lit.setSpecularPowerProperty(24.0f);
+    lit.setEmissiveColorProperty(Vector3(0, 0, 0));
+    DirectionalLight& l0 = lit.getDirectionalLight0Property();
+    l0.setEnabledProperty(true);
+    l0.setDirectionProperty(Vector3::Normalize(Vector3(0.3f, -0.8f, 0.4f)));
+    l0.setDiffuseColorProperty(Vector3(0.75f, 0.73f, 0.7f));
+    lit.getDirectionalLight1Property().setEnabledProperty(false);
+    lit.getDirectionalLight2Property().setEnabledProperty(false);
+    // Opaque first, then the translucent glassware (alpha < 1 draws are issued in the same pass; the
+    // NonPremultiplied blend handles both, with depth writes on so the small shapes sort well enough).
+    ctx.device.setBlendStateProperty(BlendState::NonPremultiplied);
+    for (auto& [id, st] : active_) {
+        const Room& r = plan_.room(id);
+        switch (r.type) {
+        case RoomType::PhysicsLab:
+        case RoomType::ChemistryLab:
+        case RoomType::BiologyLab: DrawLab(ctx, r, st); break;
+        case RoomType::Workshop: DrawWorkshop(ctx, r, st); break;
+        case RoomType::Gym: DrawGym(ctx, r, st); break;
+        default: break;
+        }
+    }
+    lit.setAlphaProperty(1.0f);
+    ctx.device.setBlendStateProperty(BlendState::Opaque);
+}

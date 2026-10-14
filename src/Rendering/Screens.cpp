@@ -182,6 +182,34 @@ Texture2D* Screens::BoardFor(School::Subject subject)
     return ptr;
 }
 
+Texture2D* Screens::PlateFor(School::RoomId room)
+{
+    auto it = plates_.find(room);
+    if (it != plates_.end()) return it->second.get();
+    if (s_.font == nullptr) return nullptr;
+    const Room& r = plan_.room(room);
+    auto rt = std::make_unique<RenderTarget2D>(*s_.device, 192, 64, false, SurfaceFormat::Color, DepthFormat::None, 0, RenderTargetUsage::PreserveContents);
+    GraphicsDevice& device = *s_.device;
+    device.SetRenderTarget(rt.get());
+    const School::Wing& w = plan_.wings[static_cast<std::size_t>(r.wing)];
+    device.Clear(Color(static_cast<int>(w.accent[0] * 200.0f), static_cast<int>(w.accent[1] * 200.0f), static_cast<int>(w.accent[2] * 200.0f), 255));
+    const SamplerState sampler = SamplerState::LinearClamp;
+    s_.sprites->Begin(SpriteSortMode::Deferred, &BlendState::NonPremultiplied, &sampler, nullptr, nullptr);
+    s_.sprites->Draw(*s_.textures->White(), Rectangle(4, 4, 184, 56), Color(250, 250, 248, 255));
+    s_.sprites->DrawString(*s_.font, r.code, Vector2(12, 4), Color(20, 24, 40, 255), 0.0f, Vector2(0, 0), 1.05f, SpriteEffects::None, 0.0f);
+    std::string type = School::TypeName(r.type);
+    if (r.name.rfind(type, 0) != 0) {   // a named room ("Main lobby S0.41"): show the name without the code
+        type = r.name.substr(0, r.name.size() > r.code.size() + 1 ? r.name.size() - r.code.size() - 1 : r.name.size());
+    }
+    s_.sprites->DrawString(*s_.font, type, Vector2(12, 36), Color(60, 64, 80, 255), 0.0f, Vector2(0, 0), 0.55f, SpriteEffects::None, 0.0f);
+    s_.sprites->End();
+    device.SetRenderTarget(nullptr);
+    Texture2D* ptr = rt.get();
+    plates_[room] = std::move(rt);
+    ++rendered_;
+    return ptr;
+}
+
 void Screens::RenderOffscreen(GraphicsDevice& device, EffectBank& fx, SkyDome& sky, WorldRenderer& world, NpcRenderer& npcs, const School::SchoolSim& sim, const WorldLighting& light, double time)
 {
     rendered_ = 0;
@@ -301,5 +329,50 @@ void Screens::Draw(const DrawContext& ctx, const School::SchoolSim& sim, const W
             quads.push_back(q);
         }
     }
+    // Door plates: the room's code beside each of its doors, on the corridor side, within 25 m.
+    const float plateRange2 = 25.0f * 25.0f;
+    for (const School::RoomId id : world.LoadedRooms()) {
+        const Room& r = plan_.room(id);
+        if (!r.Indoor() || School::Info(r.type).circulation) continue;
+        for (const School::DoorId did : r.doors) {
+            const School::Door& d = plan_.door(did);
+            if (d.kind == School::DoorKind::Opening) continue;
+            const Room& other = plan_.room(d.Other(id));
+            if (!School::Info(other.type).circulation || !other.Indoor()) continue;
+            const float y0 = plan_.FloorY(d.level);
+            School::Vec2 n = d.Normal();
+            if (d.a != id) n = n * -1.0f;   // now points from this room into the corridor
+            const School::Vec2 along = n.RightHand();
+            const School::Vec2 at = d.pos + n * 0.012f + along * (d.width * 0.5f + 0.32f);
+            const Vector3 centre(at.x, y0 + 1.6f, at.z);
+            if (Vector3::DistanceSquared(centre, ctx.view.eye) > plateRange2) continue;
+            const float yaw = std::atan2(-n.x, -n.z);
+            Vector3 right, up, nn;
+            panelAxes(yaw, 0.42f, 0.14f, right, up, nn);
+            Quad q;
+            q.centre = centre;
+            q.right = right;
+            q.up = up;
+            q.texture = PlateFor(id);
+            quads.push_back(q);
+        }
+    }
+    // The auditorium's projection screen shows the signage.
+    if (signageAge_ < 30.0f)
+        for (const School::RoomId id : world.LoadedRooms()) {
+            const Room& r = plan_.room(id);
+            if (r.type != RoomType::Auditorium) continue;
+            for (const School::Fixture& f : layouts_.Get(id).fixtures) {
+                if (f.type != School::FixtureType::Screen) continue;
+                Vector3 right, up, n;
+                panelAxes(f.yaw, f.sx - 0.3f, f.sy - 0.3f, right, up, n);
+                Quad q;
+                q.centre = Vector3(f.pos.x, plan_.FloorY(r.level) + f.y0 + f.sy * 0.5f, f.pos.z) + n * (f.sz * 0.5f + 0.012f);
+                q.right = right;
+                q.up = up;
+                q.texture = signage_.get();
+                quads.push_back(q);
+            }
+        }
     DrawQuads(ctx, quads);
 }

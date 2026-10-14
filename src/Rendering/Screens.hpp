@@ -55,6 +55,7 @@ private:
     void DrawQuads(const DrawContext& ctx, const std::vector<Quad>& quads);
     void RenderSignage(Microsoft::Xna::Framework::Graphics::GraphicsDevice& device, const School::SchoolSim& sim);
     Microsoft::Xna::Framework::Graphics::Texture2D* BoardFor(School::Subject subject);
+    Microsoft::Xna::Framework::Graphics::Texture2D* PlateFor(School::RoomId room);
 
     Services& s_;
     const School::SchoolPlan& plan_;
@@ -80,6 +81,7 @@ private:
     float signageAge_ = 10.0f;
     bool signageNear_ = false;
     std::map<int, std::unique_ptr<Microsoft::Xna::Framework::Graphics::RenderTarget2D>> boards_;
+    std::map<int, std::unique_ptr<Microsoft::Xna::Framework::Graphics::RenderTarget2D>> plates_;   // door plates by room
     std::vector<Microsoft::Xna::Framework::Graphics::VertexPositionColorTexture> scratch_;
     int rendered_ = 0;
     Microsoft::Xna::Framework::Vector3 eye_;
