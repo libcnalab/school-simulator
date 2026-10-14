@@ -87,6 +87,20 @@ private:
     };
     std::vector<Monitor> monitors_;           // the diagnostics monitors (server rooms, security offices)
     void RenderDiagnostics(Microsoft::Xna::Framework::Graphics::GraphicsDevice& device);
+    // Computer-lab desktops: one animated picture shared by every monitor in range.
+    std::unique_ptr<Microsoft::Xna::Framework::Graphics::RenderTarget2D> desktop_;
+    float desktopAge_ = 10.0f;
+    bool desktopNear_ = false;
+    float desktopTime_ = 0.0f;
+    void RenderDesktop(Microsoft::Xna::Framework::Graphics::GraphicsDevice& device);
+    // Elevator floor indicators: a small texture per shaft showing the cab's level, redrawn when it changes.
+    struct Indicator {
+        std::unique_ptr<Microsoft::Xna::Framework::Graphics::RenderTarget2D> target;
+        int shownLevel = -99;
+        bool shownMoving = false;
+    };
+    std::vector<Indicator> indicators_;
+    void RenderIndicator(Microsoft::Xna::Framework::Graphics::GraphicsDevice& device, int shaft, const School::ElevatorStatus& st);
     float signageAge_ = 10.0f;
     bool signageNear_ = false;
     std::map<int, std::unique_ptr<Microsoft::Xna::Framework::Graphics::RenderTarget2D>> boards_;

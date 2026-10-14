@@ -96,6 +96,58 @@ Screens::Screens(Services& services, const School::SchoolPlan& plan, const Schoo
         }
     }
     diagnostics_ = std::make_unique<RenderTarget2D>(*s_.device, 384, 256, false, SurfaceFormat::Color, DepthFormat::None, 0, RenderTargetUsage::PreserveContents);
+    desktop_ = std::make_unique<RenderTarget2D>(*s_.device, 256, 192, false, SurfaceFormat::Color, DepthFormat::None, 0, RenderTargetUsage::PreserveContents);
+    for (std::size_t i = 0; i < plan.elevators.size(); ++i) {
+        Indicator ind;
+        ind.target = std::make_unique<RenderTarget2D>(*s_.device, 128, 64, false, SurfaceFormat::Color, DepthFormat::None, 0, RenderTargetUsage::PreserveContents);
+        indicators_.push_back(std::move(ind));
+    }
+}
+
+void Screens::RenderDesktop(GraphicsDevice& device)
+{
+    if (s_.font == nullptr) return;
+    device.SetRenderTarget(desktop_.get());
+    device.Clear(Color(18, 40, 78, 255));
+    const SamplerState sampler = SamplerState::LinearClamp;
+    s_.sprites->Begin(SpriteSortMode::Deferred, &BlendState::NonPremultiplied, &sampler, nullptr, nullptr);
+    // taskbar, a few window frames and a bouncing logo: enough to read as a desktop from across the room
+    s_.sprites->Draw(*s_.textures->White(), Rectangle(0, 172, 256, 20), Color(30, 34, 44, 255));
+    s_.sprites->Draw(*s_.textures->White(), Rectangle(24, 22, 150, 110), Color(236, 238, 242, 255));
+    s_.sprites->Draw(*s_.textures->White(), Rectangle(24, 22, 150, 14), Color(70, 110, 180, 255));
+    for (int i = 0; i < 5; ++i) s_.sprites->Draw(*s_.textures->White(), Rectangle(32, 44 + i * 16, 60 + (i * 37) % 70, 6), Color(120, 128, 140, 255));
+    const float t = desktopTime_;
+    const int bx = 150 + static_cast<int>(70.0f * std::fabs(std::sin(t * 0.7f)));
+    const int by = 40 + static_cast<int>(100.0f * std::fabs(std::sin(t * 0.9f + 1.0f)));
+    s_.sprites->Draw(*s_.textures->White(), Rectangle(bx, by, 26, 26), Color(255, 180, 40, 255));
+    s_.sprites->Draw(*s_.textures->White(), Rectangle(bx + 6, by + 6, 14, 14), Color(18, 40, 78, 255));
+    char buf[32];
+    std::snprintf(buf, sizeof buf, "%02d:%02d", static_cast<int>(t / 60.0f) % 24, static_cast<int>(t) % 60);
+    s_.sprites->DrawString(*s_.font, "SCHOOL IT", Vector2(8, 173), Color(200, 210, 230, 255), 0.0f, Vector2(0, 0), 0.5f, SpriteEffects::None, 0.0f);
+    s_.sprites->End();
+    device.SetRenderTarget(nullptr);
+    desktopAge_ = 0.0f;
+    ++rendered_;
+}
+
+void Screens::RenderIndicator(GraphicsDevice& device, int shaft, const School::ElevatorStatus& st)
+{
+    if (s_.titleFont == nullptr) return;
+    Indicator& ind = indicators_[static_cast<std::size_t>(shaft)];
+    device.SetRenderTarget(ind.target.get());
+    device.Clear(Color(10, 10, 14, 255));
+    const SamplerState sampler = SamplerState::LinearClamp;
+    s_.sprites->Begin(SpriteSortMode::Deferred, &BlendState::NonPremultiplied, &sampler, nullptr, nullptr);
+    const int floorLabel = st.level - 1;
+    std::string text = floorLabel < 0 ? "B" : std::to_string(floorLabel);
+    if (st.moving && st.target >= 0) text += st.target > st.level ? " ^" : " v";
+    const Vector2 size = s_.titleFont->MeasureString(text) * 0.8f;
+    s_.sprites->DrawString(*s_.titleFont, text, Vector2(64.0f - size.X * 0.5f, 6.0f), Color(255, 120, 40, 255), 0.0f, Vector2(0, 0), 0.8f, SpriteEffects::None, 0.0f);
+    s_.sprites->End();
+    device.SetRenderTarget(nullptr);
+    ind.shownLevel = st.level;
+    ind.shownMoving = st.moving;
+    ++rendered_;
 }
 
 void Screens::RenderDiagnostics(GraphicsDevice& device)
@@ -161,6 +213,15 @@ void Screens::Update(float dt, const Vector3& eye, const School::SchoolSim&)
     for (const Monitor& m : monitors_)
         if (Vector3::DistanceSquared(m.centre, eye) < 14.0f * 14.0f) diagnosticsNear_ = true;
     diagnosticsAge_ += dt;
+    desktopAge_ += dt;
+    desktopTime_ += dt;
+    desktopNear_ = false;
+    for (const Room& r : plan_.rooms) {
+        if (r.type != RoomType::ComputerLab) continue;
+        const School::Vec2 c = r.rect.Clamp(School::Vec2{eye.X, eye.Z});
+        const float dy = plan_.FloorY(r.level) - eye.Y;
+        if ((c.x - eye.X) * (c.x - eye.X) + (c.z - eye.Z) * (c.z - eye.Z) + dy * dy < 20.0f * 20.0f) desktopNear_ = true;
+    }
 }
 
 std::vector<WorldRenderer::Anchor> Screens::Anchors() const
@@ -272,6 +333,12 @@ void Screens::RenderOffscreen(GraphicsDevice& device, EffectBank& fx, SkyDome& s
     rendered_ = 0;
     if (signageNear_ && signageAge_ >= 1.0f) RenderSignage(device, sim);
     if (diagnosticsNear_ && diagnosticsAge_ >= 0.5f) RenderDiagnostics(device);
+    if (desktopNear_ && desktopAge_ >= 0.2f) RenderDesktop(device);
+    for (int i = 0; i < sim.ElevatorCount() && i < static_cast<int>(indicators_.size()); ++i) {
+        const School::ElevatorStatus st = sim.Elevator(i);
+        const Indicator& ind = indicators_[static_cast<std::size_t>(i)];
+        if (ind.shownLevel != st.level || ind.shownMoving != st.moving) RenderIndicator(device, i, st);
+    }
     if (!cctvActive_ || cameras_.empty()) return;
     // One of the four shown cameras per frame, round robin.
     const int shown = std::min(4, static_cast<int>(cameras_.size()));
@@ -413,6 +480,49 @@ void Screens::Draw(const DrawContext& ctx, const School::SchoolSim& sim, const W
             q.up = up;
             q.texture = PlateFor(id);
             quads.push_back(q);
+        }
+    }
+    // Computer lab monitors show the desktop.
+    if (desktopAge_ < 30.0f)
+        for (const School::RoomId id : world.LoadedRooms()) {
+            const Room& r = plan_.room(id);
+            if (r.type != RoomType::ComputerLab) continue;
+            const School::Vec2 c = r.rect.Clamp(School::Vec2{ctx.view.eye.X, ctx.view.eye.Z});
+            if ((c.x - ctx.view.eye.X) * (c.x - ctx.view.eye.X) + (c.z - ctx.view.eye.Z) * (c.z - ctx.view.eye.Z) > 20.0f * 20.0f) continue;
+            for (const School::Fixture& f : layouts_.Get(id).fixtures) {
+                if (f.type != School::FixtureType::ComputerDesk) continue;
+                const Matrix frame = Matrix::CreateRotationY(f.yaw) * Matrix::CreateTranslation(f.pos.x, plan_.FloorY(r.level) + f.y0, f.pos.z);
+                Vector3 right, up, n;
+                panelAxes(f.yaw, 0.42f, 0.27f, right, up, n);
+                Quad q;
+                q.centre = Vector3::Transform(Vector3(0.0f, f.sy + 0.26f, f.sz * 0.5f - 0.2f - 0.019f), frame) + n * 0.003f;
+                q.right = right;
+                q.up = up;
+                q.texture = desktop_.get();
+                quads.push_back(q);
+            }
+        }
+    // Elevator floor indicators above every hall door.
+    for (std::size_t i = 0; i < plan_.elevators.size() && i < indicators_.size(); ++i) {
+        if (indicators_[i].shownLevel == -99) continue;
+        const School::ElevatorShaft& e = plan_.elevators[i];
+        for (const School::RoomId cab : e.cab) {
+            if (cab == School::kNone || !world.IsLoaded(cab)) continue;
+            const Room& r = plan_.room(cab);
+            for (const School::DoorId did : r.doors) {
+                const School::Door& d = plan_.door(did);
+                const School::Vec2 n = School::SideNormal(e.entrySide);
+                const Vector3 centre(d.pos.x + n.x * 0.03f, plan_.FloorY(r.level) + School::kDoorHeight + 0.32f, d.pos.z + n.z * 0.03f);
+                if (Vector3::DistanceSquared(centre, ctx.view.eye) > 30.0f * 30.0f) continue;
+                Vector3 right, up, nn;
+                panelAxes(std::atan2(-n.x, -n.z), 0.4f, 0.2f, right, up, nn);
+                Quad q;
+                q.centre = centre;
+                q.right = right;
+                q.up = up;
+                q.texture = indicators_[i].target.get();
+                quads.push_back(q);
+            }
         }
     }
     // Diagnostics monitors.

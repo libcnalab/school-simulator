@@ -23,8 +23,11 @@ pictures of two renderers by eye or with an image diff; the HUD can be hidden wi
 | Date | Renderer | Machine | Result |
 |---|---|---|---|
 | 2026-10-14 | OPENGLES3 (EasyGL, Mesa llvmpipe 25.0 under Xvfb) | build host, no GPU | tour: 17/17 ok, no draw errors, 10-25 fps in software |
-| 2026-10-14 | OPENGL33 | | pending (multi-renderer tree building) |
-| 2026-10-14 | SOFTWARE | | pending |
+| 2026-10-14 | OPENGL33 (EasyGL, same Mesa) | build host | tour: 17/17 ok, no draw errors; pictures match OPENGLES3 pixel for pixel in the scenes compared (classroom, cafeteria, stairs) |
+| 2026-10-14 | SOFTWARE (CNA's CPU rasteriser) | build host | tour: 17/17 ok with `SCHOOL_TIMEOUT=1500`, no draw errors; same geometry, lighting, render targets and text as the GL renderers; only the room banner's fade differs (frame timing) |
+| 2026-10-14 | OPENGLES3 | build host | `tools/determinism.sh`: two fixed-step runs give the same digest and byte-identical screenshots |
+
+Not run: FNA3D, WEBGPU, SDL_GPU, DIRECTX9 (not built into this tree; see the museum project's notes for how).
 
 ## CNA findings
 

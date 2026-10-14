@@ -6,7 +6,9 @@
   triangles all carry the same texture coordinate comes out black with `SamplerState::AnisotropicWrap`.
   The school gives every face real UVs, so nothing in the app shows it; a CNA-side check (LOD clamp or
   anisotropic fallback) is still worth doing. Found 2026-10-14.
-- Only OPENGLES3 has been run so far; OPENGL33 and SOFTWARE results are pending (`docs/RENDERER_TESTING.md`).
+- FNA3D, WEBGPU, SDL_GPU and DIRECTX9 have not been run (`docs/RENDERER_TESTING.md`).
+- Elevator: abstract riders inside a shaft are not drawn (they would float at the wrong height); the cab has
+  no inner door and no arrival chime; a cab that is full keeps people waiting up to 60 s, then they board anyway.
 - Frame rate on the build host is 10-25 fps because it has no GPU (llvmpipe); not measured on hardware.
 - Extreme population: 21 late arrivals per day (people whose seat overflowed walk further); fine, but the
   overflow spots are rings around a seat, not extra desks.

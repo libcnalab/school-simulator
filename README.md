@@ -62,7 +62,9 @@ build/bin/school-sim-cli --days 5 --preset extreme --check  # soak
 build/bin/school-sim-cli --day --full --students 300        # full-fidelity walking around a focus point
 ```
 
-`tools/check_all.sh` runs everything: build, tests, validation, days, the screenshot tour.
+`tools/check_all.sh` runs everything: build, tests, validation, days, the screenshot tour. `tools/soak.sh`
+runs a school morning at x30 and checks memory and stuck people; `tools/determinism.sh` checks that two
+fixed-step runs end in the same state and picture.
 
 ## Layout of the repository
 

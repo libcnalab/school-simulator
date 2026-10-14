@@ -26,6 +26,8 @@ Working notes for whoever continues (human or agent). Dates are when something w
 tools/build.sh                         # 3 jobs (the owner asked for at most 3 cores); build/ is the only tree
 tools/check_all.sh                     # everything; -q skips the screenshot tour
 tools/tour.sh [-p busy] [-r SOFTWARE]  # screenshots into build/shots, exit 1 on failure or draw error
+tools/soak.sh                          # a school morning at x30, memory and stuck-people check
+tools/determinism.sh                   # two fixed-step runs, same digest and picture
 xvfb-run -a -s "-screen 0 1280x720x24" build/bin/cna-school-simulator --no-audio --script "wait:5;busiest:Cafeteria;shot:x.png;quit"
 ```
 
@@ -65,8 +67,8 @@ Project rules from `../CLAUDE.md` apply: one shared ccache (`CCACHE_DIR=/rv/cnac
 
 ## What is next (priority order)
 
-1. **SOFTWARE renderer**: finish `SCHOOL_TIMEOUT=1500 tools/tour.sh -r SOFTWARE -o build/shots-software`
-   (very slow here) and record it in `docs/RENDERER_TESTING.md`; compare pictures across the three renderers.
+1. **Other renderers**: FNA3D, WEBGPU, SDL_GPU (museum-simulator's `docs/RENDERER_TESTING.md` has the build
+   recipe); the three built here (OPENGLES3, OPENGL33, SOFTWARE) pass the tour.
 2. **Performance on a GPU**: nothing has been measured on hardware. Corridor segments could be merged per wing,
    far rooms could share a simplified mesh, people beyond 110 m are not drawn at all.
 3. **Signs**: wing names at corridor ends, "you are here" boards by the staircases (the door plates and the

@@ -752,8 +752,8 @@ std::vector<std::string> SchoolGame::StatsLines() const
     const School::SimStats& ss = sim_->Stats();
     std::snprintf(buf, sizeof buf, "%.0f fps  %.1f ms  %dx%d  %s", static_cast<double>(stats_.fps), static_cast<double>(stats_.frameMilliseconds), stats_.backBufferWidth, stats_.backBufferHeight, rendererName_.c_str());
     out.emplace_back(buf);
-    std::snprintf(buf, sizeof buf, "sim %.2f ms  clock %s  day %d  %s  x%g", static_cast<double>(stats_.simMilliseconds), School::ClockText(sim_->Time(), true).c_str(), sim_->Day() + 1,
-                  PhaseLabel(sim_->Schedule(), sim_->PhaseIndex()).c_str(), static_cast<double>(timePaused_ ? 0.0f : timeScale_));
+    std::snprintf(buf, sizeof buf, "sim %.2f ms  clock %s  day %d  %s  x%g  digest %016llx", static_cast<double>(stats_.simMilliseconds), School::ClockText(sim_->Time(), true).c_str(),
+                  sim_->Day() + 1, PhaseLabel(sim_->Schedule(), sim_->PhaseIndex()).c_str(), static_cast<double>(timePaused_ ? 0.0f : timeScale_), static_cast<unsigned long long>(sim_->Digest()));
     out.emplace_back(buf);
     std::snprintf(buf, sizeof buf, "people %d  on campus %d  walking %d  full %d  drawn %d (%d detailed)", stats_.npcTotal, stats_.npcOnCampus, stats_.npcWalking, stats_.npcFull, stats_.npcDrawn,
                   stats_.npcDrawnDetailed);
@@ -1058,6 +1058,8 @@ void SchoolGame::RunScript()
         } else if (op == "pos") {
             float x = 0, y = 0, z = 0;
             if (std::sscanf(arg.c_str(), "%f,%f,%f", &x, &y, &z) == 3) player_->Place(Vector3(x, y, z), camera_.Yaw(), camera_.Pitch(), camera_);
+        } else if (op == "pitch") {
+            camera_.SetPose(camera_.Position(), camera_.Yaw(), MathHelper::ToRadians(static_cast<float>(std::atof(arg.c_str()))));
         } else if (op == "look") {
             float yaw = 0, pitch = 0;
             if (std::sscanf(arg.c_str(), "%f,%f", &yaw, &pitch) == 2) camera_.SetPose(camera_.Position(), MathHelper::ToRadians(yaw), MathHelper::ToRadians(pitch));

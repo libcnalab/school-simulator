@@ -24,7 +24,7 @@ namespace {
 
 bool Animated(RoomType t)
 {
-    return t == RoomType::PhysicsLab || t == RoomType::ChemistryLab || t == RoomType::BiologyLab || t == RoomType::Workshop || t == RoomType::Gym;
+    return t == RoomType::PhysicsLab || t == RoomType::ChemistryLab || t == RoomType::BiologyLab || t == RoomType::Workshop || t == RoomType::Gym || t == RoomType::ArtStudio;
 }
 
 /** World transform of a fixture's local frame (origin at its base centre). */
@@ -179,6 +179,36 @@ void RoomEffects::DrawWorkshop(const DrawContext& ctx, const Room& r, RoomState&
     }
 }
 
+void RoomEffects::DrawArt(const DrawContext& ctx, const Room& r, RoomState& st)
+{
+    // A still life on the central table, lit per pixel with a strong specular term: the materials demonstration.
+    const School::RoomLayout& l = layouts_.Get(r.id);
+    const Fixture* table = FirstOf(l, FixtureType::Table);
+    if (table == nullptr) return;
+    const float y0 = plan_.FloorY(r.level);
+    const Matrix frame = FixtureFrame(*table, y0);
+    const float top = table->sy;
+    const Shapes& sh = *s_.shapes;
+    BasicEffect& lit = ctx.fx.Lit();
+    lit.setPreferPerPixelLightingProperty(true);
+    lit.setSpecularColorProperty(Vector3(0.9f, 0.9f, 0.9f));
+    lit.setSpecularPowerProperty(48.0f);
+    const float spin = st.time * 0.4f;
+    // a glossy sphere, a matte cone, a tall vase (stacked cylinders) and a cube, slowly turning on a plate
+    DrawShape(ctx, sh.Cylinder(), Matrix::CreateScale(1.0f, 0.03f, 1.0f) * Matrix::CreateRotationY(spin) * Matrix::CreateTranslation(0, top, 0) * frame, Vector3(0.35f, 0.3f, 0.28f));
+    DrawShape(ctx, sh.Sphere(), Matrix::CreateScale(0.3f) * Matrix::CreateTranslation(0.25f, top + 0.18f, 0.1f) * Matrix::CreateRotationY(spin) * frame, Vector3(0.9f, 0.2f, 0.2f));
+    lit.setSpecularColorProperty(Vector3(0.05f, 0.05f, 0.05f));
+    DrawShape(ctx, sh.Cone(), Matrix::CreateScale(0.26f, 0.4f, 0.26f) * Matrix::CreateTranslation(-0.25f, top + 0.03f, 0.15f) * Matrix::CreateRotationY(spin) * frame, Vector3(0.95f, 0.85f, 0.55f));
+    lit.setSpecularColorProperty(Vector3(0.6f, 0.6f, 0.7f));
+    lit.setSpecularPowerProperty(16.0f);
+    DrawShape(ctx, sh.Cylinder(), Matrix::CreateScale(0.14f, 0.35f, 0.14f) * Matrix::CreateTranslation(-0.05f, top + 0.03f, -0.25f) * Matrix::CreateRotationY(spin) * frame, Vector3(0.2f, 0.35f, 0.6f));
+    DrawShape(ctx, sh.Cylinder(), Matrix::CreateScale(0.1f, 0.12f, 0.1f) * Matrix::CreateTranslation(-0.05f, top + 0.38f, -0.25f) * Matrix::CreateRotationY(spin) * frame, Vector3(0.2f, 0.35f, 0.6f));
+    DrawShape(ctx, sh.Cube(), Matrix::CreateScale(0.2f) * Matrix::CreateRotationY(0.6f) * Matrix::CreateTranslation(0.25f, top + 0.13f, -0.25f) * Matrix::CreateRotationY(spin) * frame, Vector3(0.9f, 0.9f, 0.9f));
+    lit.setPreferPerPixelLightingProperty(false);
+    lit.setSpecularColorProperty(Vector3(0.25f, 0.25f, 0.25f));
+    lit.setSpecularPowerProperty(24.0f);
+}
+
 void RoomEffects::DrawGym(const DrawContext& ctx, const Room&, RoomState& st)
 {
     const Shapes& sh = *s_.shapes;
@@ -200,7 +230,11 @@ void RoomEffects::Draw(const DrawContext& ctx)
     l0.setEnabledProperty(true);
     l0.setDirectionProperty(Vector3::Normalize(Vector3(0.3f, -0.8f, 0.4f)));
     l0.setDiffuseColorProperty(Vector3(0.75f, 0.73f, 0.7f));
-    lit.getDirectionalLight1Property().setEnabledProperty(false);
+    DirectionalLight& l1 = lit.getDirectionalLight1Property();
+    l1.setEnabledProperty(true);
+    l1.setDirectionProperty(Vector3::Normalize(Vector3(-0.6f, -0.5f, -0.3f)));
+    l1.setDiffuseColorProperty(Vector3(0.35f, 0.38f, 0.45f));
+    l1.setSpecularColorProperty(Vector3(0.5f, 0.5f, 0.6f));
     lit.getDirectionalLight2Property().setEnabledProperty(false);
     // Opaque first, then the translucent glassware (alpha < 1 draws are issued in the same pass; the
     // NonPremultiplied blend handles both, with depth writes on so the small shapes sort well enough).
@@ -213,6 +247,7 @@ void RoomEffects::Draw(const DrawContext& ctx)
         case RoomType::BiologyLab: DrawLab(ctx, r, st); break;
         case RoomType::Workshop: DrawWorkshop(ctx, r, st); break;
         case RoomType::Gym: DrawGym(ctx, r, st); break;
+        case RoomType::ArtStudio: DrawArt(ctx, r, st); break;
         default: break;
         }
     }

@@ -33,6 +33,7 @@ private:
     void DrawLab(const DrawContext& ctx, const School::Room& r, RoomState& st);
     void DrawWorkshop(const DrawContext& ctx, const School::Room& r, RoomState& st);
     void DrawGym(const DrawContext& ctx, const School::Room& r, RoomState& st);
+    void DrawArt(const DrawContext& ctx, const School::Room& r, RoomState& st);
 
     Services& s_;
     const School::SchoolPlan& plan_;
