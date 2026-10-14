@@ -517,6 +517,27 @@ void SchoolGame::UpdateInteractables()
         // Things inside the player's room.
         const float y0 = plan_.FloorY(r.level);
         const School::RoomLayout& l = layouts_->Get(id);
+        // Light switches beside the doors (see RoomGeometry: hinge side, 1.15 m up, 0.25 m past the opening).
+        if (!School::Info(r.type).circulation)
+            for (const School::DoorId did : r.doors) {
+                const School::Door& d = plan_.door(did);
+                if (d.kind == School::DoorKind::Opening) continue;
+                School::Vec2 n = d.Normal();
+                if (d.a == id) n = n * -1.0f;   // into this room
+                const School::Vec2 along = n.RightHand() * -1.0f;   // the wall's u direction seen from inside runs the other way
+                const School::Vec2 at = d.pos + n * 0.03f + along * (d.width * 0.5f + 0.25f);
+                if (School::DistanceSq(at, p) > 5.0f * 5.0f) continue;
+                Interactable it;
+                it.box = BoundingBox(Vector3(at.x - 0.08f, y0 + 1.07f, at.z - 0.08f), Vector3(at.x + 0.08f, y0 + 1.23f, at.z + 0.08f));
+                if (lightOverride_.size() != plan_.rooms.size()) lightOverride_.assign(plan_.rooms.size(), 0);
+                const signed char ov = lightOverride_[static_cast<std::size_t>(id)];
+                it.prompt = ov < 0 ? "Lights: switch on" : ov > 0 ? "Lights: back to automatic" : "Lights: switch off";
+                it.activate = [this, id] {
+                    signed char& o = lightOverride_[static_cast<std::size_t>(id)];
+                    o = o < 0 ? 1 : o > 0 ? 0 : -1;
+                };
+                interaction_.Add(std::move(it));
+            }
         for (const School::Fixture& f : l.fixtures) {
             if (School::DistanceSq(f.pos, p) > 6.0f * 6.0f) continue;
             Interactable it;
@@ -871,6 +892,10 @@ void SchoolGame::Draw(const GameTime& gameTime)
             if (!dim) want = 1.0f;                       // daylight: the lights hardly matter, keep the rooms bright
             else if (open) want = circulation || occupied ? 1.0f : 0.0f;
             else want = occupied ? 1.0f : (r.type == RoomType::ServerRoom || r.type == RoomType::SecurityOffice ? 1.0f : 0.0f);
+            if (lightOverride_.size() != plan_.rooms.size()) lightOverride_.assign(plan_.rooms.size(), 0);
+            const signed char ov = lightOverride_[static_cast<std::size_t>(id)];
+            if (ov > 0) want = 1.0f;
+            else if (ov < 0) want = 0.12f;   // off: the room keeps a little light from its windows and the corridor
             float& v = roomLight_[static_cast<std::size_t>(id)];
             v += (want - v) * std::min(1.0f, dt * 4.0f);
         }
@@ -1004,6 +1029,7 @@ void SchoolGame::SaveScreenshot(const std::string& path)
 //   wait:N          skip N frames                  goto:ROOM       stand in a room (code, name or type)
 //   pos:x,y,z       put the feet there             look:yaw,pitch  set the view (degrees)
 //   walk:F,S,N      walk with forward F / strafe S input for N frames (collision applies)
+//   turn:DEG        turn by an angle               pitch:DEG       look up or down
 //   time:HH:MM      set the school clock           speed:F         time scale        skip   next lesson
 //   drill           toggle the fire drill          bell            ring the bell     announce   PA message
 //   e               use what is under the crosshair    map     toggle the big map    debug:N   overlay mode
@@ -1079,6 +1105,8 @@ void SchoolGame::RunScript()
         } else if (op == "pos") {
             float x = 0, y = 0, z = 0;
             if (std::sscanf(arg.c_str(), "%f,%f,%f", &x, &y, &z) == 3) player_->Place(Vector3(x, y, z), camera_.Yaw(), camera_.Pitch(), camera_);
+        } else if (op == "turn") {
+            camera_.Rotate(MathHelper::ToRadians(static_cast<float>(std::atof(arg.c_str()))), 0.0f);
         } else if (op == "pitch") {
             camera_.SetPose(camera_.Position(), camera_.Yaw(), MathHelper::ToRadians(static_cast<float>(std::atof(arg.c_str()))));
         } else if (op == "look") {

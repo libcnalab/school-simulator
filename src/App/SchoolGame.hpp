@@ -139,6 +139,7 @@ private:
     NpcDrawStats npcStats_;
     std::vector<School::ElevatorStatus> elevators_;
     std::vector<float> roomLight_;   // per room, 0..1, eased towards the wanted state
+    std::vector<signed char> lightOverride_;   // per room: 0 automatic, 1 forced on, -1 forced off (the switches by the doors)
     int ridingShaft_ = -1;
     void UpdateElevators();
 };

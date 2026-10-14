@@ -779,6 +779,18 @@ RoomGeometry BuildRoomGeometry(const SchoolPlan& plan, const School::LayoutCache
                 set.Opaque(tex).AddPatch(origin + u * (c - 0.45f) + n * 0.01f + Vector3(0, 1.3f, 0), u * 0.9f, Vector3(0, 1.2f, 0), 0.0f, kWhite, 10.0f);
             }
         }
+        // Light switches beside every door, inside the room, on the hinge side.
+        if (!School::Info(room.type).circulation)
+            for (const DoorId did : room.doors) {
+                const Door& d = plan.door(did);
+                if (SideOfDoor(d, id) != side || d.kind == DoorKind::Opening) continue;
+                const float c = AlongWall(r, side, d.pos) + d.width * 0.5f + 0.25f;
+                if (c > length - 0.1f) continue;
+                MeshBuilder& b = set.Opaque("white");
+                const Vector3 at = origin + u * c + n * 0.012f + Vector3(0, 1.15f, 0);
+                b.AddBoxTransformed(Matrix::CreateTranslation(0, 0, 0), Vector3::Min(at - u * 0.04f - Vector3(0, 0.04f, 0), at + u * 0.04f + n * 0.012f + Vector3(0, 0.04f, 0)),
+                                    Vector3::Max(at - u * 0.04f - Vector3(0, 0.04f, 0), at + u * 0.04f + n * 0.012f + Vector3(0, 0.04f, 0)), 0.0f, Vector3(0.95f, 0.95f, 0.93f));
+            }
         // Door frames: jambs and a lintel, added by the room that is `a` of the door.
         for (const DoorId did : room.doors) {
             const Door& d = plan.door(did);
@@ -787,13 +799,17 @@ RoomGeometry BuildRoomGeometry(const SchoolPlan& plan, const School::LayoutCache
             MeshBuilder& b = set.Opaque("white");
             const Vector3 ft = d.kind == DoorKind::External || d.kind == DoorKind::Gate ? Vector3(0.3f, 0.3f, 0.32f) : Tint(wing.accent) * 0.9f;
             const float h = d.kind == DoorKind::Gate ? 1.6f : School::kDoorHeight;
+            const bool throughFacade = d.exit && room.Indoor() && room.HasExterior(side);
             const float t = 0.16f, w = 0.08f;
             const Vector3 a = origin + u * (c - d.width * 0.5f);
             const Vector3 bpos = origin + u * (c + d.width * 0.5f);
+            // An exit's frame reaches out to the facade so the gap between the two walls is closed.
             const Vector3 half = n * t;
-            b.AddBoxTransformed(Matrix::CreateTranslation(0, 0, 0), Vector3::Min(a - u * w - half, a + half + Vector3(0, h + w, 0)), Vector3::Max(a - u * w - half, a + half + Vector3(0, h + w, 0)), 0.0f, ft);
-            b.AddBoxTransformed(Matrix::CreateTranslation(0, 0, 0), Vector3::Min(bpos - half, bpos + u * w + half + Vector3(0, h + w, 0)), Vector3::Max(bpos - half, bpos + u * w + half + Vector3(0, h + w, 0)), 0.0f, ft);
-            b.AddBoxTransformed(Matrix::CreateTranslation(0, 0, 0), Vector3::Min(a - half + Vector3(0, h, 0), bpos + half + Vector3(0, h + w, 0)), Vector3::Max(a - half + Vector3(0, h, 0), bpos + half + Vector3(0, h + w, 0)), 0.0f, ft);
+            (void)throughFacade;
+            const Vector3 outer = throughFacade ? n * -(kFacadeOffset + 0.05f) : -half;   // how far the frame goes away from the room
+            b.AddBoxTransformed(Matrix::CreateTranslation(0, 0, 0), Vector3::Min(a - u * w + outer, a + half + Vector3(0, h + w, 0)), Vector3::Max(a - u * w + outer, a + half + Vector3(0, h + w, 0)), 0.0f, ft);
+            b.AddBoxTransformed(Matrix::CreateTranslation(0, 0, 0), Vector3::Min(bpos + outer, bpos + u * w + half + Vector3(0, h + w, 0)), Vector3::Max(bpos + outer, bpos + u * w + half + Vector3(0, h + w, 0)), 0.0f, ft);
+            b.AddBoxTransformed(Matrix::CreateTranslation(0, 0, 0), Vector3::Min(a + outer + Vector3(0, h, 0), bpos + half + Vector3(0, h + w, 0)), Vector3::Max(a + outer + Vector3(0, h, 0), bpos + half + Vector3(0, h + w, 0)), 0.0f, ft);
         }
     }
 

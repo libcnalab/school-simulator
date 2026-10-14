@@ -536,6 +536,22 @@ Goal SchoolSim::GoalFor(const Npc& npc, int phase, int sub, double& departOffset
         }
         case PhaseKind::LongBreak: {
             const float roll = Unit(H(salt, static_cast<std::uint64_t>(npc.id), 8));
+            if (roll > 0.93f) {
+                // the nearest toilets to the room of the next lesson
+                const Lesson* l = LessonOf(npc, p.lesson > 0 ? p.lesson : 1);
+                const RoomId near = l != nullptr && l->room != kNone ? l->room : g.home;
+                RoomId best = kNone;
+                float bestDist = 1e30f;
+                for (const RoomId t : plan_.RoomsOfType(RoomType::Toilets)) {
+                    if (plan_.room(t).level != plan_.room(near).level) continue;
+                    const float d = nav_.Distance(near, t);
+                    if (d >= 0.0f && d < bestDist) {
+                        bestDist = d;
+                        best = t;
+                    }
+                }
+                if (best != kNone) return IdleGoal(best, npc, salt);
+            }
             if (roll < 0.14f) return CafeteriaGoal(npc, salt);
             if (roll < 0.28f) {
                 const std::vector<RoomId> libs = plan_.RoomsOfType(RoomType::Library);
