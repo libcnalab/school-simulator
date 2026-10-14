@@ -58,7 +58,8 @@ detection. See `docs/NPC_SIMULATION.md`.
 
 ## Frame
 
-`Update`: input -> player (collision, ground height) -> simulation (`Advance(dt * timeScale)` with the focus
+`Update`: input -> elevators (statuses, closed-door blockers, the player's ride) -> player (collision, ground
+height, or free flight with F6) -> simulation (`Advance(dt * timeScale)` with the focus
 set) -> world streaming -> doors near the player -> interactables -> audio.
 `Draw`: offscreen screens -> clear -> sky -> world (outdoor tinted, indoor, doors, elevator cabs, glass) ->
 people -> screen quads -> room demonstrations -> weather -> debug lines -> HUD and map.

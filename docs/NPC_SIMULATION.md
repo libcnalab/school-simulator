@@ -49,6 +49,13 @@ both ways of walking end in the same rooms.
 Doors: `DoorRuntime` per door with an open fraction, a "wanted open until" time (walkers, the player) and a
 next-free time per direction; `UpdateDoors` animates and emits open/close sounds.
 
+## Looking at people
+
+In the app, anyone within five metres is an interactable: the prompt names them, their role and class or
+subject, and what they are doing or where they are walking to (`SchoolGame::UpdateInteractables`); `E` adds
+the home room and the current lesson. Everything shown comes from `Population` and the `Agent`, nothing is
+invented at draw time.
+
 ## Elevators
 
 Two shafts (`SchoolPlan::elevators`, east and west wings, levels 1-4) with a cab room per level and an
