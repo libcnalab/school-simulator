@@ -39,6 +39,10 @@ file(GLOB_RECURSE SCHOOL_SIM_SOURCES CONFIGURE_DEPENDS
 
 add_library(school_sim STATIC ${SCHOOL_SIM_SOURCES})
 target_include_directories(school_sim PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")
+if(EMSCRIPTEN)
+    # Every frame an exception can cross must use CNA's JS-lowered exception ABI (the alias is defined by CNA, added below).
+    target_compile_options(school_sim PUBLIC -fexceptions)
+endif()
 target_compile_options(school_sim PRIVATE -Wall -Wextra -Wpedantic -Wshadow -Wconversion -Wno-sign-conversion)
 target_compile_definitions(school_sim PUBLIC
     SCHOOL_VERSION="${PROJECT_VERSION}"
@@ -131,15 +135,32 @@ if(SCHOOL_BUILD_APP)
     if(TARGET SDL3::SDL3main)
         target_link_libraries(cna-school-simulator PRIVATE SDL3::SDL3main)
     endif()
-    if(COMMAND cna_copy_renderer_runtime)
-        cna_copy_renderer_runtime(cna-school-simulator)
+    if(EMSCRIPTEN)
+        # The browser build (tools/build_web.sh): one HTML page, the wasm, and Content/ as a single upfront preload
+        # mounted at /Content (AssetPaths finds it there). The blocking Game::Run loop runs through Asyncify, exceptions
+        # use the JS-lowered ABI like the rest of CNA, WebGL 2 is the renderer. Same recipe as house-simulator.
+        target_link_libraries(cna-school-simulator PRIVATE SHARP_RUNTIME CNA::EmscriptenExceptionAbi CNA::EmscriptenAsyncify)
+        target_link_options(cna-school-simulator PRIVATE
+            -sALLOW_MEMORY_GROWTH=1
+            -sSTACK_SIZE=1048576
+            -sINITIAL_MEMORY=268435456
+            -sFORCE_FILESYSTEM=1
+            -sEXIT_RUNTIME=1
+            "SHELL:--shell-file ${CMAKE_CURRENT_SOURCE_DIR}/web/shell.html"
+            "SHELL:--preload-file ${CMAKE_CURRENT_SOURCE_DIR}/Content@/Content")
+        set_property(TARGET cna-school-simulator APPEND PROPERTY LINK_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/web/shell.html")
+        set_target_properties(cna-school-simulator PROPERTIES SUFFIX ".html")
+        cna_apply_emscripten_renderer_link_contract(cna-school-simulator)
+    else()
+        if(COMMAND cna_copy_renderer_runtime)
+            cna_copy_renderer_runtime(cna-school-simulator)
+        endif()
+        # Content/ next to the executable keeps the build tree self-contained.
+        add_custom_command(TARGET cna-school-simulator POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_directory_if_different
+                "${CMAKE_CURRENT_SOURCE_DIR}/Content" "$<TARGET_FILE_DIR:cna-school-simulator>/Content"
+            COMMENT "Copying Content next to cna-school-simulator")
     endif()
-
-    # Content/ next to the executable keeps the build tree self-contained.
-    add_custom_command(TARGET cna-school-simulator POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E copy_directory_if_different
-            "${CMAKE_CURRENT_SOURCE_DIR}/Content" "$<TARGET_FILE_DIR:cna-school-simulator>/Content"
-        COMMENT "Copying Content next to cna-school-simulator")
     if(WIN32 AND COMMAND cna_copy_sdl_runtime)
         cna_copy_sdl_runtime(cna-school-simulator)
     endif()

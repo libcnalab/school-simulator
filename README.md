@@ -44,6 +44,15 @@ tools/build.sh school_tests school-sim-cli
 SCHOOL_RENDERERS="OPENGLES3;OPENGL33;SOFTWARE" RECONFIGURE=1 tools/build.sh   # a multi-renderer tree
 ```
 
+### In the browser
+
+```bash
+tools/build_web.sh --serve     # needs the Emscripten SDK (~/emsdk); then open http://localhost:8080/
+```
+
+The same application over CNA's WebGL 2 renderer: about 6 MB to download, 60 fps in headless Chrome with a busy
+cafeteria. Details, limits and the smoke test: `docs/WEB_BUILD.md`.
+
 ## Run
 
 ```bash

@@ -22,6 +22,10 @@ std::string AssetPaths::FindContentRoot()
     if (const char* env = std::getenv("SCHOOL_CONTENT")) {
         if (LooksLikeContent(env)) return env;
     }
+#ifdef __EMSCRIPTEN__
+    // The web build preloads Content/ into the in-memory file system at /Content.
+    if (LooksLikeContent("/Content")) return "/Content";
+#endif
     const fs::path title = Microsoft::Xna::Framework::TitleLocation::Path();
     if (LooksLikeContent(title / "Content")) return (title / "Content").string();
 #ifdef SCHOOL_SOURCE_CONTENT_DIR

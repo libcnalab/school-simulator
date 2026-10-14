@@ -36,6 +36,8 @@ people stand in different places from run to run, and those scenes are mostly pe
 further; the other scenes differ by the HUD clock, people in motion and the room banner's fade. The three GPU
 renderers ran on the CPU (lavapipe) here; the host's AMD iGPU (Phoenix1) has not been used.
 
+| 2026-10-14 | WEBGL2 (Emscripten, EasyGL over WebGL 2) in headless Chrome (SwiftShader) | build host, `build-consumer/` | `tools/web_smoke.sh`: 2/2 ok; lobby and busy cafeteria at 60 fps, 413 people drawn; see `docs/WEB_BUILD.md` |
+
 Multi-renderer recipe (museum project's, adapted; `build-probe/` is the shared throwaway tree):
 
 ```bash

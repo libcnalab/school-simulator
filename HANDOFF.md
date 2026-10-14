@@ -29,6 +29,14 @@ Working notes for whoever continues (human or agent). Dates are when something w
   `docs/RENDERER_TESTING.md`.
 - The host does have an AMD Phoenix1 iGPU and HD-Audio hardware (the owner's GNOME/Wayland session, Xwayland on :0), but every run recorded here was headless (Xvfb + llvmpipe + dummy audio). Nothing has been measured on the GPU, heard through real audio, or tried with a gamepad.
 
+- **Browser build** (2026-10-14): `tools/build_web.sh` makes `build-consumer/web-package/` (WebGL 2 via Emscripten, 6 MB
+  compressed); `tools/web_smoke.sh` drives headless Chrome through it (the Claude Chrome extension was not connected, so
+  `tools/web_drive.mjs` speaks the DevTools protocol itself). Details in `docs/WEB_BUILD.md`.
+- **Rendering performance** (2026-10-14): corridor groups and portal culling cut draw calls in a long corridor from ~500
+  to ~100 (`docs/PERFORMANCE.md`). Details added the same day: cars, three tree species, server racks in cold-aisle rows
+  with blinking lights, a metronome on the piano, kitchen steam. `school-sim-cli --room CODE` prints a room's rectangle and
+  fixtures (for placing the camera).
+
 ## Build, run, test
 
 ```bash
@@ -84,8 +92,8 @@ Project rules from `../CLAUDE.md` apply: one shared ccache (`CCACHE_DIR=/rv/cnac
 1. **Renderers on the real GPU**: all six built renderers (OPENGLES3, OPENGL33, SOFTWARE, FNA3D, WEBGPU, SDL_GPU) pass
    the tour headless (2026-10-14, recipe in `docs/RENDERER_TESTING.md`); none has run on the AMD iGPU (needs the
    owner's desktop session, DISPLAY=:0 / Wayland).
-2. **Performance on a GPU**: nothing has been measured on the GPU (the headless runs use llvmpipe). Corridor segments could be merged per wing,
-   far rooms could share a simplified mesh, people beyond 110 m are not drawn at all.
+2. **Performance on a GPU**: nothing has been measured on the GPU (the headless runs use llvmpipe). Far rooms could share a
+   simplified mesh; people beyond 110 m are not drawn at all.
 3. **Signs**: wing names at corridor ends, "you are here" boards by the staircases (the door plates and the
    lobby signage show how: `Screens::PlateFor`, `Screens::RenderSignage`).
 4. **More demonstrations**: a projected picture in the auditorium (slides), monitors in the computer labs
