@@ -94,12 +94,11 @@ Project rules from `../CLAUDE.md` apply: one shared ccache (`CCACHE_DIR=/rv/cnac
    owner's desktop session, DISPLAY=:0 / Wayland).
 2. **Performance on a GPU**: nothing has been measured on the GPU (the headless runs use llvmpipe). Far rooms could share a
    simplified mesh; people beyond 110 m are not drawn at all.
-3. **Signs**: wing names at corridor ends, "you are here" boards by the staircases (the door plates and the
-   lobby signage show how: `Screens::PlateFor`, `Screens::RenderSignage`).
-4. **More demonstrations**: a projected picture in the auditorium (slides), monitors in the computer labs
-   that show something, steam over the kitchen, a metronome in the music room.
-5. **Elevator polish**: a floor indicator above the hall door, a chime on arrival, the cab's inner door; a
-   second pair of lifts in the north and south wings if traffic warrants.
-6. **Polish**: stairwell lighting is dim, the car park cars are boxes, trees are two spheres, the server room is
-   a wall of black racks, students never visit the nurse or the toilets, nobody uses the fitness room.
-7. **Soak tooling**: `tools/soak.sh` that runs a day at x30 and fails on memory growth or stuck people.
+3. **Signs**: "you are here" boards by the staircases (wing names, door plates and floor indicators exist: `Screens::PlateFor`,
+   `Screens::RenderSignage`).
+4. **More demonstrations**: slides in the auditorium (the screen shows the lobby signage now), a sound for the metronome.
+5. **Elevator polish**: the cab's inner door; a second pair of lifts in the north and south wings if traffic warrants.
+6. **Polish**: stairwell lighting is dim; cars have no mirrors' glass or interiors; students rarely visit the nurse; nobody uses
+   the fitness room.
+7. **Browser build**: touch controls, a real-GPU measurement in a desktop browser, Firefox and Safari, an audio check
+   (`docs/WEB_BUILD.md`).
