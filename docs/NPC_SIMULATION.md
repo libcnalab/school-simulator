@@ -14,7 +14,7 @@ Presets: empty 0, light 100, normal 500, busy 1000, extreme 2400 students (`--pr
 
 At every checkpoint (phase start; lunch has a second one for the second wave) `GoalFor` decides per person:
 
-- Students: first lesson's room or a break outdoors on arrival; the timetabled room in lessons and
+- Students: first lesson's room, the lockers or a break outdoors on arrival; the timetabled room in lessons and
   passing phases; cafeteria, library, outdoors or a corridor near the next room in the long break; the
   cafeteria in their lunch wave, otherwise library / outdoors / lobby; home at dismissal, 15 % stay for a club
   (library, gym, music, computers, art, football).

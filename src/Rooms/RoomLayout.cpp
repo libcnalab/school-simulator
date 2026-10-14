@@ -646,13 +646,19 @@ void Gen::Drama()
 
 void Gen::Idle(float spacing, float margin)
 {
-    // Loiter places on a jittered grid, never in the middle of a corridor lane.
+    // Loiter places on a jittered grid, shuffled so that people arriving one after another spread over the
+    // whole area instead of filling it row by row.
     const Rect& r = room_.rect;
+    const std::size_t first = out.idle.size();
     for (float x = r.x0 + margin; x < r.x1 - margin + 1e-3f; x += spacing)
         for (float z = r.z0 + margin; z < r.z1 - margin + 1e-3f; z += spacing) {
             const Vec2 jitter{rng_.Range(-0.3f, 0.3f), rng_.Range(-0.3f, 0.3f)};
             out.idle.push_back({r.Clamp(Vec2{x, z} + jitter, margin), rng_.Range(-kPi, kPi), SpotKind::Stand, Pose::Stand});
         }
+    for (std::size_t i = out.idle.size(); i > first + 1; --i) {
+        const std::size_t j = first + static_cast<std::size_t>(rng_.Below(static_cast<int>(i - first)));
+        std::swap(out.idle[i - 1], out.idle[j]);
+    }
 }
 
 void Gen::CorridorIdle()

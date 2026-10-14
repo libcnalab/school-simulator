@@ -11,6 +11,10 @@ Working notes for whoever continues (human or agent). Dates are when something w
   normal, busy and extreme population. `tools/tour.sh` photographs 17 places on OPENGLES3 and OPENGL33 with no
   draw errors. A one-day soak at x30 with the busy preset: resident memory 279 -> 302 MB over 3.5 school hours,
   flat afterwards (navigation trees and door plates filling up).
+- Later on 2026-10-14: default preset is busy (1000 students); lamp posts glow at night and room lights follow
+  occupancy; door plates, wing signs, floor indicators, computer-lab desktops, diagnostics monitors, art still
+  life, locker visits on arrival, people sitting on benches. `tools/soak.sh -p extreme -n 6`: memory flat at
+  307 MB, nobody stuck. `tools/determinism.sh` passes.
 - Elevators (2026-10-14): two shafts (east and west wings, levels 1-4) with cabs, calls, capacity 8, boarding
   and alighting at full fidelity, timed rides for abstract walkers, the player can ride (call button, cab
   buttons). Riders are the people who prefer the lift (`Npc::usesElevator`: 6 % of students, half the teachers,
@@ -77,6 +81,6 @@ Project rules from `../CLAUDE.md` apply: one shared ccache (`CCACHE_DIR=/rv/cnac
    that show something, steam over the kitchen, a metronome in the music room.
 5. **Elevator polish**: a floor indicator above the hall door, a chime on arrival, the cab's inner door; a
    second pair of lifts in the north and south wings if traffic warrants.
-6. **Polish**: stairwell lighting is dim, lobby interior needs more presence (benches and a trophy cabinet),
-   the car park cars are boxes, trees are two spheres, the server room is a wall of black racks.
+6. **Polish**: stairwell lighting is dim, the car park cars are boxes, trees are two spheres, the server room is
+   a wall of black racks, students never visit the nurse or the toilets, nobody uses the fitness room.
 7. **Soak tooling**: `tools/soak.sh` that runs a day at x30 and fails on memory growth or stuck people.
