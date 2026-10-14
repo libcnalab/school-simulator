@@ -676,6 +676,14 @@ void Gen::CorridorIdle()
 void Gen::Outdoor()
 {
     const Rect& r = room_.rect;
+    // Lamp posts along the edges of the paved zones, every 18 m or so, a little inside the boundary.
+    if (room_.type == RoomType::Plaza || room_.type == RoomType::Parking || room_.type == RoomType::Courtyard || room_.type == RoomType::BikeArea) {
+        const float inset = 1.2f;
+        for (float x = r.x0 + 9.0f; x < r.x1 - 6.0f; x += 18.0f) {
+            out.fixtures.push_back({FixtureType::Lamp, {x, r.z0 + inset}, 0, 0.2f, 4.5f, 0.2f, 0, kMetal, true});
+            if (r.Depth() > 20.0f) out.fixtures.push_back({FixtureType::Lamp, {x + 9.0f, r.z1 - inset}, 0, 0.2f, 4.5f, 0.2f, 0, kMetal, true});
+        }
+    }
     switch (room_.type) {
     case RoomType::Courtyard: {
         // Benches around a central bed of trees; open lawn between.

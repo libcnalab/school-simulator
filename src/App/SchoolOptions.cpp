@@ -39,7 +39,7 @@ const char* SchoolOptions::Usage()
         "  --no-vsync                disable vertical sync                --no-hud       draw only the 3D scene\n"
         "  --sensitivity F           mouse sensitivity multiplier (default 1.0)\n"
         "  --volume F                master volume 0..1                  --no-audio     no sound at all\n"
-        "  --preset NAME             population: empty, light, normal, busy, extreme (default normal)\n"
+        "  --preset NAME             population: empty, light, normal, busy, extreme (default busy: 1000 students)\n"
         "  --students N              exact number of students (overrides the preset)\n"
         "  --seed N                  simulation seed (default 1)\n"
         "  --time HH:MM              start the school clock there (default 07:50)\n"

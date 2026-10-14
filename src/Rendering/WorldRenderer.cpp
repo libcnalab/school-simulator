@@ -5,7 +5,9 @@
 #include <cmath>
 
 #include "App/Log.hpp"
+#include "Microsoft/Xna/Framework/BoundingSphere.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BlendState.hpp"
+#include "Microsoft/Xna/Framework/Graphics/PrimitiveType.hpp"
 #include "Microsoft/Xna/Framework/Graphics/DepthStencilState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RasterizerState.hpp"
 #include "Microsoft/Xna/Framework/MathHelper.hpp"
@@ -36,8 +38,61 @@ WorldRenderer::WorldRenderer(Services& services, const School::SchoolPlan& plan,
         Upload(set, {sun}, Vector3(0.62f, 0.62f, 0.62f), c.opaque, c.transparent, c.bounds, tris);
         facade_.push_back(std::move(c));
     }
+    // Every outdoor lamp post, for the night glow.
+    for (const Room& r : plan.rooms) {
+        if (r.Indoor()) continue;
+        for (const School::Fixture& f : layouts.Get(r.id).fixtures)
+            if (f.type == School::FixtureType::Lamp) lamps_.push_back({Vector3(f.pos.x, plan.FloorY(r.level) + f.y0 + f.sy - 0.27f, f.pos.z), plan.FloorY(r.level)});
+    }
     const double ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();
-    School::Log("world", "facade built: %zu chunks in %.0f ms", facade_.size(), ms);
+    School::Log("world", "facade built: %zu chunks, %zu lamp posts, in %.0f ms", facade_.size(), lamps_.size(), ms);
+}
+
+void WorldRenderer::DrawLamps(const DrawContext& ctx, const WorldLighting& light)
+{
+    // Additive glow billboards at the lamp heads and pools of light on the ground, fading in as the daylight goes.
+    const float night = std::clamp(1.0f - light.daylight * 1.6f, 0.0f, 1.0f);
+    if (night < 0.02f || lamps_.empty()) return;
+    const Matrix& v = ctx.view.view;
+    const Vector3 right(v.M11, v.M21, v.M31);
+    const Vector3 up(v.M12, v.M22, v.M32);
+    lampScratch_.clear();
+    const auto quad = [&](const Vector3& a, const Vector3& b, const Vector3& c, const Vector3& d, const Color& col) {
+        lampScratch_.emplace_back(a, col, Vector2(0, 0));
+        lampScratch_.emplace_back(b, col, Vector2(1, 0));
+        lampScratch_.emplace_back(c, col, Vector2(1, 1));
+        lampScratch_.emplace_back(a, col, Vector2(0, 0));
+        lampScratch_.emplace_back(c, col, Vector2(1, 1));
+        lampScratch_.emplace_back(d, col, Vector2(0, 1));
+    };
+    const auto tone = [&](float f) { return static_cast<int>(std::clamp(f * night, 0.0f, 1.0f) * 255.0f); };
+    const Color glow(tone(1.0f), tone(0.85f), tone(0.55f), 255);
+    const Color pool(tone(0.45f), tone(0.4f), tone(0.25f), 255);
+    int drawn = 0;
+    for (const Lamp& l : lamps_) {
+        if (Vector3::DistanceSquared(l.head, ctx.view.eye) > 120.0f * 120.0f) continue;
+        if (!ctx.view.frustum.Intersects(BoundingSphere(Vector3(l.head.X, l.groundY + 2.0f, l.head.Z), 6.0f))) continue;
+        const Vector3 r = right * 0.9f, u = up * 0.9f;
+        quad(l.head - r + u, l.head + r + u, l.head + r - u, l.head - r - u, glow);
+        const float R = 5.0f;
+        const Vector3 g(l.head.X, l.groundY + 0.03f, l.head.Z);
+        quad(g + Vector3(-R, 0, -R), g + Vector3(R, 0, -R), g + Vector3(R, 0, R), g + Vector3(-R, 0, R), pool);
+        ++drawn;
+    }
+    if (lampScratch_.empty()) return;
+    GraphicsDevice& device = ctx.device;
+    device.setBlendStateProperty(BlendState::Additive);
+    device.setDepthStencilStateProperty(DepthStencilState::DepthRead);
+    device.setRasterizerStateProperty(RasterizerState::CullNone);
+    BasicEffect& fx = ctx.fx.World();
+    fx.setWorldProperty(Matrix::getIdentityProperty());
+    fx.setDiffuseColorProperty(Vector3(1, 1, 1));
+    fx.setTextureProperty(s_.textures->Get("particle"));
+    EffectBank::Apply(fx);
+    device.DrawUserPrimitives(PrimitiveType::TriangleList, lampScratch_.data(), 0, static_cast<int>(lampScratch_.size()) / 3);
+    stats_.drawCalls += 1;
+    stats_.trianglesDrawn += drawn * 4;
+    RenderStates::SetOpaque3D(device);
 }
 
 WorldRenderer::~WorldRenderer() = default;
@@ -232,6 +287,8 @@ void WorldRenderer::Draw(const DrawContext& ctx, const WorldLighting& light, con
 
     DrawDoors(ctx, light, doors);
     DrawElevators(ctx, elevators);
+
+    DrawLamps(ctx, light);
 
     // Glass last, without depth writes, so panes blend over what is behind them.
     RenderStates::SetTransparent3D(device, BlendState::NonPremultiplied);

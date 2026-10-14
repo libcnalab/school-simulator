@@ -569,10 +569,10 @@ void Screens::Draw(const DrawContext& ctx, const School::SchoolSim& sim, const W
             q.texture = diagnostics_.get();
             quads.push_back(q);
         }
-    // Wing signs: above the doors in the middle of every other corridor segment, on the wall with fewer doors.
+    // Wing signs: above the doors in the middle of every corridor segment, on the wall with fewer doors.
     for (const School::RoomId id : world.LoadedRooms()) {
         const Room& r = plan_.room(id);
-        if (r.type != RoomType::Corridor || (id % 2) != 0 || std::max(r.rect.Width(), r.rect.Depth()) < 10.0f) continue;
+        if (r.type != RoomType::Corridor || std::max(r.rect.Width(), r.rect.Depth()) < 10.0f) continue;
         const School::Vec2 c = r.rect.Center();
         const Vector3 centre3(c.x, plan_.FloorY(r.level) + 2.6f, c.z);
         if (Vector3::DistanceSquared(centre3, ctx.view.eye) > 45.0f * 45.0f) continue;

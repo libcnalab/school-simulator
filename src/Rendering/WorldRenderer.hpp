@@ -96,6 +96,13 @@ private:
     void DrawBatches(const DrawContext& ctx, const std::vector<Batch>& batches, bool transparent);
     void DrawDoors(const DrawContext& ctx, const WorldLighting& light, const std::vector<School::DoorRuntime>& doors);
     void DrawElevators(const DrawContext& ctx, const std::vector<School::ElevatorStatus>& elevators);
+    void DrawLamps(const DrawContext& ctx, const WorldLighting& light);
+    struct Lamp {
+        Microsoft::Xna::Framework::Vector3 head;
+        float groundY;
+    };
+    std::vector<Lamp> lamps_;
+    std::vector<Microsoft::Xna::Framework::Graphics::VertexPositionColorTexture> lampScratch_;
 
     Services& s_;
     const School::SchoolPlan& plan_;

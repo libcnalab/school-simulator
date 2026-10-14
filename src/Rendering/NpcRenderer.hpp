@@ -59,6 +59,7 @@ private:
     std::unique_ptr<Microsoft::Xna::Framework::Graphics::DynamicVertexBuffer> vertexBuffer_;
     std::unique_ptr<Microsoft::Xna::Framework::Graphics::IndexBuffer> indexBuffer_;
     std::vector<Microsoft::Xna::Framework::Graphics::VertexPositionColorTexture> vertices_;
+    std::vector<Look> looks_;   // per npc id, filled on first use
     int boxes_ = 0;
     int maxBoxes_ = 0;
     const DrawContext* ctx_ = nullptr;

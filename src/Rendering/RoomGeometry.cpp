@@ -388,7 +388,10 @@ void AddFixture(MeshSet& set, const Fixture& f, float baseY, int roomId)
         break;
     }
     case FixtureType::Lamp: {
-        s.Box("white", Vector3(-hx, 0, -hz), Vector3(hx, f.sy, hz), Vector3(1.0f, 0.97f, 0.9f), 1.0f);
+        // A post with a head; the glow at night is drawn by WorldRenderer::DrawLamps.
+        s.B("white").AddCylinder(Vector3::Transform(Vector3(0, 0, 0), s.world), 0.06f, f.sy - 0.3f, 8, 0.0f, Vector3(0.3f, 0.32f, 0.35f), false);
+        s.Box("white", Vector3(-0.22f, f.sy - 0.3f, -0.22f), Vector3(0.22f, f.sy, 0.22f), Vector3(0.35f, 0.36f, 0.4f));
+        s.Box("white", Vector3(-0.18f, f.sy - 0.29f, -0.18f), Vector3(0.18f, f.sy - 0.25f, 0.18f), Vector3(1.0f, 0.95f, 0.8f), 1.0f);
         break;
     }
     case FixtureType::Box:

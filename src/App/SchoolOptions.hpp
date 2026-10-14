@@ -23,7 +23,7 @@ struct SchoolOptions {
     float fixedTimeStep = 0.0f;         // >0: advance by this many seconds per frame (deterministic runs)
 
     // the simulation
-    std::string preset = "normal";      // empty | light | normal | busy | extreme
+    std::string preset = "busy";        // empty | light | normal | busy | extreme
     int students = -1;                  // overrides the preset
     unsigned long long seed = 1;
     std::optional<double> startTime;    // seconds since midnight

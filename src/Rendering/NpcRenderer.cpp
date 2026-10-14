@@ -331,7 +331,12 @@ void NpcRenderer::Draw(const DrawContext& ctx, const School::SchoolSim& sim, con
         f.time = static_cast<float>(now) + phaseSeed * 3.0f;
         const float d = std::sqrt(d2);
         f.lod = d < detailRadius ? 2 : (d < mediumRadius ? 1 : 0);
-        f.look = LookOf(npc, pop);
+        if (looks_.size() != pop.npcs.size()) {
+            looks_.clear();
+            looks_.reserve(pop.npcs.size());
+            for (const Npc& n : pop.npcs) looks_.push_back(LookOf(n, pop));
+        }
+        f.look = looks_[static_cast<std::size_t>(npc.id)];
         AddFigure(f);
         ++stats.drawn;
         if (f.lod == 2) ++stats.detailed;
