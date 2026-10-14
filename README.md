@@ -60,6 +60,9 @@ Elevators: `E` on the call button beside the door, step in, `E` on the panel's u
 beside the doors inside rooms switch a room's lights off, on, or back to automatic (they follow occupancy and daylight).
 A gamepad works too (left stick walk, right stick look, A use, Start pause, Y map).
 
+On a Wayland desktop with a CNA older than 2026-10-14 the window cannot be centred and the game refuses to start;
+run it under XWayland with `SDL_VIDEO_DRIVER=x11 build/bin/cna-school-simulator`.
+
 Headless (no display): `xvfb-run -a -s "-screen 0 1280x720x24" build/bin/cna-school-simulator --no-audio --script "..."`.
 The script language (`goto:`, `busiest:`, `time:`, `speed:`, `drill`, `shot:`, `stats`, `quit`, ...) is documented at
 `SchoolGame::RunScript` in `src/App/SchoolGame.cpp`; `tools/tour.sh` uses it to photograph every key place.

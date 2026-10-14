@@ -19,6 +19,11 @@
 
 ## Fixed
 
+- **Start-up failed on Wayland**: `Window::CenterOnDisplay failed: wayland cannot position non-popup windows`.
+  CNA treated SDL's refusal to place a window as fatal; it is cosmetic. Fixed in CNA (`Sdl3Window::CenterOnDisplay`
+  is best-effort now). Until a CNA rebuild, `SDL_VIDEO_DRIVER=x11 build/bin/cna-school-simulator` (XWayland) works.
+  2026-10-14.
+
 - NPC boxes rendered black (constant UVs, see above). 2026-10-14.
 - Screen quads invisible: flipping a panel's width axis flipped the winding, CullClockwise dropped them;
   texture coordinates are mirrored instead. 2026-10-14.
