@@ -24,7 +24,8 @@ namespace {
 
 bool Animated(RoomType t)
 {
-    return t == RoomType::PhysicsLab || t == RoomType::ChemistryLab || t == RoomType::BiologyLab || t == RoomType::Workshop || t == RoomType::Gym || t == RoomType::ArtStudio;
+    return t == RoomType::PhysicsLab || t == RoomType::ChemistryLab || t == RoomType::BiologyLab || t == RoomType::Workshop || t == RoomType::Gym || t == RoomType::ArtStudio ||
+           t == RoomType::MusicRoom || t == RoomType::Kitchen || t == RoomType::ServerRoom;
 }
 
 /** World transform of a fixture's local frame (origin at its base centre). */
@@ -209,6 +210,79 @@ void RoomEffects::DrawArt(const DrawContext& ctx, const Room& r, RoomState& st)
     lit.setSpecularPowerProperty(24.0f);
 }
 
+void RoomEffects::DrawMusic(const DrawContext& ctx, const Room& r, RoomState& st)
+{
+    // A pyramid-shaped metronome on the piano: the arm swings once per beat pair, 72 beats a minute.
+    const School::RoomLayout& l = layouts_.Get(r.id);
+    const Fixture* piano = FirstOf(l, FixtureType::Piano);
+    if (piano == nullptr) return;
+    const Matrix frame = FixtureFrame(*piano, plan_.FloorY(r.level));
+    const Shapes& sh = *s_.shapes;
+    const float top = piano->sy;
+    const Vector3 at(piano->sx * 0.32f, top, 0.0f);
+    DrawShape(ctx, sh.Cone(), Matrix::CreateScale(0.1f, 0.22f, 0.1f) * Matrix::CreateTranslation(at) * frame, Vector3(0.45f, 0.28f, 0.16f));
+    DrawShape(ctx, sh.Cube(), Matrix::CreateScale(0.14f, 0.02f, 0.1f) * Matrix::CreateTranslation(at.X, top, at.Z) * frame, Vector3(0.3f, 0.19f, 0.1f));
+    const float beat = st.time * 72.0f / 60.0f;                       // beats so far
+    const float angle = 0.5f * std::sin(beat * 3.14159265f);          // one full swing every two beats
+    const Matrix swing = Matrix::CreateRotationZ(angle) * Matrix::CreateTranslation(at.X, top + 0.03f, at.Z - 0.052f) * frame;
+    DrawShape(ctx, sh.Cylinder(), Matrix::CreateScale(0.006f, 0.2f, 0.006f) * swing, Vector3(0.8f, 0.8f, 0.82f));
+    DrawShape(ctx, sh.Cube(), Matrix::CreateScale(0.035f, 0.028f, 0.02f) * Matrix::CreateTranslation(0, 0.13f, 0) * swing, Vector3(0.85f, 0.7f, 0.2f));
+}
+
+void RoomEffects::DrawKitchen(const DrawContext& ctx, const Room& r, RoomState& st)
+{
+    // A pot on every counter and a column of steam above it: soft white puffs that rise, swell and fade.
+    const School::RoomLayout& l = layouts_.Get(r.id);
+    const float y0 = plan_.FloorY(r.level);
+    const Shapes& sh = *s_.shapes;
+    int n = 0;
+    for (const Fixture& f : l.fixtures) {
+        if (f.type != FixtureType::Counter) continue;
+        const Matrix frame = FixtureFrame(f, y0);
+        const float x = (n % 2 == 0 ? -0.25f : 0.25f) * f.sx;
+        DrawShape(ctx, sh.Cylinder(), Matrix::CreateScale(0.2f, 0.2f, 0.2f) * Matrix::CreateTranslation(x, f.sy, 0.0f) * frame, Vector3(0.55f, 0.57f, 0.6f));
+        DrawShape(ctx, sh.Cylinder(), Matrix::CreateScale(0.17f, 0.012f, 0.17f) * Matrix::CreateTranslation(x, f.sy + 0.19f, 0.0f) * frame, Vector3(0.9f, 0.62f, 0.2f));   // the soup
+        for (int k = 0; k < 5; ++k) {
+            const float phase = std::fmod(st.time * 0.32f + static_cast<float>(k) * 0.2f + static_cast<float>(n) * 0.13f, 1.0f);
+            const float sway = 0.06f * std::sin(phase * 7.0f + static_cast<float>(k + n));
+            DrawShape(ctx, sh.Sphere(), Matrix::CreateScale(0.05f + 0.16f * phase) * Matrix::CreateTranslation(x + sway, f.sy + 0.24f + phase * 1.1f, sway * 0.7f) * frame,
+                      Vector3(0.95f, 0.96f, 0.98f), 0.38f * (1.0f - phase));
+        }
+        ++n;
+    }
+}
+
+void RoomEffects::DrawServer(const DrawContext& ctx, const Vector3& eye, const Room& r, RoomState& st)
+{
+    // Activity lights on the racks: each rack unit has an amber or blue light that flickers at its own rate. Only racks
+    // within a few metres are drawn; further away they are too small to matter.
+    const School::RoomLayout& l = layouts_.Get(r.id);
+    const float y0 = plan_.FloorY(r.level);
+    const Shapes& sh = *s_.shapes;
+    BasicEffect& lit = ctx.fx.Lit();
+    int rack = 0;
+    for (const Fixture& f : l.fixtures) {
+        if (f.type != FixtureType::Rack) continue;
+        ++rack;
+        const Matrix frame = FixtureFrame(f, y0);
+        const Vector3 centre = Vector3::Transform(Vector3(0, f.sy * 0.5f, 0), frame);
+        if (Vector3::DistanceSquared(centre, eye) > 12.0f * 12.0f) continue;
+        const float hz = f.sz * 0.5f;
+        const int steps = static_cast<int>(st.time * 7.0f);
+        for (int k = 0; k < 14; ++k) {
+            const float y = 0.2f + static_cast<float>(k) * 0.12f;
+            if (y > f.sy - 0.4f) break;
+            const std::uint64_t h = School::Hash(static_cast<std::uint64_t>(rack), static_cast<std::uint64_t>(k), static_cast<std::uint64_t>(steps + k * 3));
+            const float u = static_cast<float>(h % 1000U) / 1000.0f;
+            if (u > 0.55f) continue;
+            const Vector3 colour = (h >> 20U) % 3U == 0U ? Vector3(0.2f, 0.5f, 1.0f) : Vector3(1.0f, 0.6f, 0.1f);
+            lit.setEmissiveColorProperty(colour);
+            DrawShape(ctx, sh.Cube(), Matrix::CreateScale(0.014f, 0.008f, 0.006f) * Matrix::CreateTranslation(f.sx * 0.5f - 0.1f - 0.025f * static_cast<float>(h % 3U), y, -hz - 0.04f) * frame, Vector3(0, 0, 0));
+        }
+    }
+    lit.setEmissiveColorProperty(Vector3(0, 0, 0));
+}
+
 void RoomEffects::DrawGym(const DrawContext& ctx, const Room&, RoomState& st)
 {
     const Shapes& sh = *s_.shapes;
@@ -248,6 +322,9 @@ void RoomEffects::Draw(const DrawContext& ctx)
         case RoomType::Workshop: DrawWorkshop(ctx, r, st); break;
         case RoomType::Gym: DrawGym(ctx, r, st); break;
         case RoomType::ArtStudio: DrawArt(ctx, r, st); break;
+        case RoomType::MusicRoom: DrawMusic(ctx, r, st); break;
+        case RoomType::Kitchen: DrawKitchen(ctx, r, st); break;
+        case RoomType::ServerRoom: DrawServer(ctx, ctx.view.eye, r, st); break;
         default: break;
         }
     }

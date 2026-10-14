@@ -563,7 +563,8 @@ void Gen::ServerRoom()
         for (int i = 0; i < std::max(2, static_cast<int>((W - 2.0f) / 0.7f)); ++i) {
             const float u = 1.0f + 0.7f * static_cast<float>(i);
             if (u > W - 0.8f) break;
-            Fix(FixtureType::Rack, u, 3.0f + 2.4f * static_cast<float>(row), 0.6f, 2.1f, 1.0f, AlongU(), kDark);
+            // Two rows facing each other across a cold aisle.
+            Fix(FixtureType::Rack, u, 3.0f + 2.4f * static_cast<float>(row), 0.6f, 2.1f, 1.0f, AlongU() + (row == 0 ? 0.0f : kPi), kDark);
         }
     Fix(FixtureType::ComputerDesk, W - 1.0f, D - 0.7f, 1.4f, 0.76f, 0.7f, DoorYaw(), kLight);
     out.work.push_back(MakeSpot(W - 1.0f, D - 1.4f, FarYaw(), SpotKind::Work, Pose::SitType));
@@ -737,8 +738,10 @@ void Gen::Outdoor()
             for (int row = 0; row < 2; ++row) {
                 if (Unit(Hash(static_cast<std::uint64_t>(x * 10.0f), static_cast<std::uint64_t>(row), static_cast<std::uint64_t>(room_.id))) < 0.45f) continue;
                 const float z = r.z0 + 6.0f + static_cast<float>(row) * 22.0f;
-                out.fixtures.push_back({FixtureType::Box, {x, z}, 0.2f, 1.9f, 1.3f, 4.4f, 0.0f,
-                                        static_cast<std::uint8_t>(3 + static_cast<int>(Unit(Hash(static_cast<std::uint64_t>(x), static_cast<std::uint64_t>(row), 9)) * 5.0f)), true});
+                const std::uint64_t h = Hash(static_cast<std::uint64_t>(x), static_cast<std::uint64_t>(row), 9);
+                // Nose in or nose out, and a colour from the palette's saturated end.
+                out.fixtures.push_back({FixtureType::Car, {x, z}, 0.0f, 1.85f, 1.45f, 4.4f, Unit(h * 3 + 1) < 0.5f ? 0.0f : kPi,
+                                        static_cast<std::uint8_t>(3 + static_cast<int>(Unit(h) * 5.0f)), true});
             }
         Idle(8.0f, 2.0f);
         break;

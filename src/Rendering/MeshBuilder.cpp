@@ -124,6 +124,17 @@ void MeshBuilder::Append(const MeshBuilder& other)
     for (const std::uint16_t i : other.indices_) indices_.push_back(static_cast<std::uint16_t>(base + i));
 }
 
+void MeshBuilder::AppendTransformed(const MeshBuilder& other, const Matrix& world)
+{
+    const int base = static_cast<int>(vertices_.size());
+    for (Vertex v : other.vertices_) {
+        v.position = Vector3::Transform(v.position, world);
+        v.normal = Vector3::TransformNormal(v.normal, world);
+        AddVertex(v);
+    }
+    for (const std::uint16_t i : other.indices_) indices_.push_back(static_cast<std::uint16_t>(base + i));
+}
+
 void MeshBuilder::AddCylinder(const Vector3& baseCentre, float radius, float height, int segments,
                               float texMeters, const Vector3& tint, bool caps, float emissive)
 {

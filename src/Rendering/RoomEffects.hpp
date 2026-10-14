@@ -2,7 +2,8 @@
 
 // Small animated demonstrations in the specialist rooms, drawn as lit primitives: a pendulum and a launched
 // ball in the physics labs, bubbling flasks in chemistry, a turning helix in biology, running machines in
-// the workshops, bouncing balls in the gym. Only rooms that are loaded and near the player are animated.
+// the workshops, bouncing balls in the gym, a metronome on the piano, steam over the kitchen's pots and the blinking
+// lights of the server racks. Only rooms that are loaded and near the player are animated.
 
 #include <map>
 #include <vector>
@@ -34,6 +35,9 @@ private:
     void DrawWorkshop(const DrawContext& ctx, const School::Room& r, RoomState& st);
     void DrawGym(const DrawContext& ctx, const School::Room& r, RoomState& st);
     void DrawArt(const DrawContext& ctx, const School::Room& r, RoomState& st);
+    void DrawMusic(const DrawContext& ctx, const School::Room& r, RoomState& st);
+    void DrawKitchen(const DrawContext& ctx, const School::Room& r, RoomState& st);
+    void DrawServer(const DrawContext& ctx, const Microsoft::Xna::Framework::Vector3& eye, const School::Room& r, RoomState& st);
 
     Services& s_;
     const School::SchoolPlan& plan_;

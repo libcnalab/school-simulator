@@ -46,6 +46,7 @@ enum class FixtureType : std::uint8_t {
     BikeRack,
     Goal,            // football goal
     Lamp,            // a floor or ceiling light that is drawn as a lit object
+    Car,             // a parked car (nose towards local +z)
     Box              // anything else: a crate, a bin
 };
 

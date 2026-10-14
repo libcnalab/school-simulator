@@ -250,6 +250,7 @@ void SchoolGame::PlaceInRoom(RoomId id)
         at = f.Point(f.W() * 0.5f, s.entryDepth * 0.5f);
     }
     player_->Place(Vector3(at.x, y, at.z), yaw, 0.0f, camera_);
+    School::Log("script", "placed in %s %s: room x %.1f..%.1f z %.1f..%.1f, feet (%.1f, %.1f, %.1f)", r.code.c_str(), r.name.c_str(), r.rect.x0, r.rect.x1, r.rect.z0, r.rect.z1, at.x, y, at.z);
     world_->Ensure(id);
     currentRoom_ = School::kNone;   // so the banner announces the new room
     bannerRoom_ = School::kNone;

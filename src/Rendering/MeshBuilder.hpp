@@ -86,6 +86,9 @@ public:
     /** Appends every vertex and triangle of another builder. */
     void Append(const MeshBuilder& other);
 
+    /** Appends another builder's triangles moved by `world` (rotation and translation only: normals are rotated, not rescaled). */
+    void AppendTransformed(const MeshBuilder& other, const Microsoft::Xna::Framework::Matrix& world);
+
     /** Vertical cylinder with smooth side normals. */
     void AddCylinder(const Microsoft::Xna::Framework::Vector3& baseCentre, float radius, float height,
                      int segments, float texMeters, const Microsoft::Xna::Framework::Vector3& tint,

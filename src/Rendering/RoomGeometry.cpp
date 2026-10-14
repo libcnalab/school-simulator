@@ -172,6 +172,37 @@ struct FixtureSink {
                    Vector3::TransformNormal(Vector3(0, y1 - y0, 0), world), 0.0f, tint, 10.0f, emissive);
         b.SetAlpha(1.0f);
     }
+    /** A quad p0-p1-p2-p3 (local coordinates, going round) facing away from `inside`. */
+    void Quad(const char* tex, const Vector3& p0, const Vector3& p1, const Vector3& p3, const Vector3& inside, const Vector3& tint, float emissive = 0.0f)
+    {
+        Vector3 u = p1 - p0, v = p3 - p0;
+        const Vector3 centre = p0 + (u + v) * 0.5f;
+        Vector3 origin = p0;
+        if (Vector3::Dot(Vector3::Cross(u, v), centre - inside) < 0.0f) std::swap(u, v);
+        B(tex).AddPatch(Vector3::Transform(origin, world), Vector3::TransformNormal(u, world), Vector3::TransformNormal(v, world), 0.0f, tint, 10.0f, emissive);
+    }
+    /** A box that narrows from the bottom rectangle (x0,z0,x1,z1 at y0) to the top one (at y1): a car's greenhouse. */
+    void Frustum(const char* sideTex, float y0, float y1, const float bottom[4], const float top[4], const Vector3& sides, const Vector3& roof)
+    {
+        const Vector3 b00(bottom[0], y0, bottom[1]), b10(bottom[2], y0, bottom[1]), b11(bottom[2], y0, bottom[3]), b01(bottom[0], y0, bottom[3]);
+        const Vector3 t00(top[0], y1, top[1]), t10(top[2], y1, top[1]), t11(top[2], y1, top[3]), t01(top[0], y1, top[3]);
+        const Vector3 centre = (b00 + b11 + t00 + t11) * 0.25f;
+        Quad(sideTex, b00, b10, t00, centre, sides);   // back
+        Quad(sideTex, b10, b11, t10, centre, sides);   // right
+        Quad(sideTex, b11, b01, t11, centre, sides);   // front
+        Quad(sideTex, b01, b00, t01, centre, sides);   // left
+        Quad("white", t00, t10, t01, centre, roof);    // roof
+    }
+    /** A cylinder lying along local x: the outer face at x = `outerX`, running `width` inwards. */
+    void Wheel(float outerX, float y, float z, float radius, float width, const Vector3& tyre, const Vector3& hub)
+    {
+        const bool plusX = outerX > 0.0f;
+        MeshBuilder tmp;
+        tmp.AddCylinder(Vector3(0, 0, 0), radius, width, 14, 0.0f, tyre, true);
+        tmp.AddCylinder(Vector3(0, width, 0), radius * 0.55f, 0.012f, 10, 0.0f, hub, true);
+        const Matrix m = Matrix::CreateRotationZ(plusX ? -1.5707963f : 1.5707963f) * Matrix::CreateTranslation(plusX ? outerX - width : outerX + width, y, z) * world;
+        B("white").AppendTransformed(tmp, m);
+    }
     void Legs(float sx, float sz, float height, float thickness, const Vector3& tint, float inset = 0.06f)
     {
         const float hx = sx * 0.5f - inset, hz = sz * 0.5f - inset, t = thickness * 0.5f;
@@ -181,6 +212,8 @@ struct FixtureSink {
         }
     }
 };
+
+void AddBar(MeshBuilder& b, const Vector3& from, const Vector3& to, float thickness, const Vector3& tint);
 
 Vector3 Palette(int i) { return PaletteColor(i); }
 
@@ -303,12 +336,72 @@ void AddFixture(MeshSet& set, const Fixture& f, float baseY, int roomId)
         break;
     }
     case FixtureType::Rack: {
-        s.Box("white", Vector3(-hx, 0, -hz), Vector3(hx, f.sy, hz), Vector3(0.12f, 0.12f, 0.14f));
-        for (float y = 0.2f; y < f.sy - 0.1f; y += 0.09f) {
-            s.Box("white", Vector3(-hx + 0.03f, y, -hz - 0.01f), Vector3(hx - 0.03f, y + 0.06f, -hz), Vector3(0.25f, 0.26f, 0.28f));
-            const bool on = s.rng.Uniform() < 0.8f;
-            s.Box("white", Vector3(hx - 0.1f, y + 0.02f, -hz - 0.015f), Vector3(hx - 0.07f, y + 0.04f, -hz), on ? Vector3(0.2f, 1.0f, 0.3f) : Vector3(1.0f, 0.6f, 0.1f), 1.0f);
+        // A cabinet with a vented door, a patch panel and servers in the slots, some of them blanked off; the
+        // blinking lights are drawn by RoomEffects, the steady ones (power, drive bays) are part of the mesh.
+        const Vector3 frame(0.2f, 0.21f, 0.24f);
+        s.Box("white", Vector3(-hx, 0.0f, -hz), Vector3(hx, 0.08f, hz), frame);                       // plinth
+        s.Box("white", Vector3(-hx, 0.08f, -hz + 0.02f), Vector3(-hx + 0.03f, f.sy, hz), frame);       // posts and sides
+        s.Box("white", Vector3(hx - 0.03f, 0.08f, -hz + 0.02f), Vector3(hx, f.sy, hz), frame);
+        s.Box("white", Vector3(-hx, 0.08f, hz - 0.02f), Vector3(hx, f.sy, hz), frame);                // back
+        s.Box("white", Vector3(-hx, f.sy - 0.04f, -hz), Vector3(hx, f.sy, hz), frame);                // roof
+        const float front = -hz;
+        float y = 0.16f;
+        int unit = 0;
+        while (y < f.sy - 0.34f) {
+            const float u1 = 0.045f;
+            const float roll = s.rng.Uniform();
+            const float h = roll < 0.35f ? u1 * 2.0f : u1;
+            if (roll > 0.88f) {                                    // blanking panel
+                s.Box("white", Vector3(-hx + 0.03f, y, front - 0.012f), Vector3(hx - 0.03f, y + h, front), Vector3(0.07f, 0.07f, 0.08f));
+            } else {
+                const Vector3 face = unit % 5 == 0 ? Vector3(0.18f, 0.20f, 0.30f) : unit % 3 == 0 ? Vector3(0.28f, 0.29f, 0.31f) : Vector3(0.20f, 0.21f, 0.23f);
+                s.Box("white", Vector3(-hx + 0.03f, y, front - 0.03f), Vector3(hx - 0.03f, y + h - 0.004f, front), face);
+                // drive bays: a row of small lighter slots
+                const int bays = h > u1 * 1.5f ? 8 : 4;
+                for (int b = 0; b < bays; ++b) {
+                    const float x0 = -hx + 0.07f + static_cast<float>(b) * (f.sx - 0.2f) / static_cast<float>(bays);
+                    s.Box("white", Vector3(x0, y + 0.006f, front - 0.036f), Vector3(x0 + (f.sx - 0.2f) / static_cast<float>(bays) - 0.008f, y + h - 0.012f, front - 0.03f), Vector3(0.34f, 0.35f, 0.38f));
+                }
+                s.Box("white", Vector3(hx - 0.075f, y + 0.012f, front - 0.036f), Vector3(hx - 0.06f, y + 0.026f, front - 0.03f), Vector3(0.2f, 1.0f, 0.3f), 1.0f);   // power
+            }
+            y += h + 0.004f;
+            ++unit;
         }
+        // patch panel with a loom of cables on top of the unit stack
+        s.Box("white", Vector3(-hx + 0.03f, y, front - 0.02f), Vector3(hx - 0.03f, y + 0.07f, front), Vector3(0.32f, 0.32f, 0.35f));
+        const Vector3 cables[3] = {Vector3(0.15f, 0.35f, 0.9f), Vector3(0.95f, 0.8f, 0.15f), Vector3(0.9f, 0.4f, 0.1f)};
+        for (int k = 0; k < 9; ++k) {
+            const float x = -hx + 0.07f + static_cast<float>(k) * (f.sx - 0.14f) / 9.0f;
+            s.Box("white", Vector3(x, y - 0.02f, front - 0.05f), Vector3(x + 0.012f, y + 0.5f - 0.04f * static_cast<float>(k % 3), front - 0.035f), cables[k % 3]);
+        }
+        // the cable tray and the orange trunk on the roof
+        s.Box("white", Vector3(-hx * 0.8f, f.sy, -hz * 0.4f), Vector3(hx * 0.8f, f.sy + 0.04f, hz * 0.4f), Vector3(0.4f, 0.4f, 0.42f));
+        s.Box("white", Vector3(-hx * 0.5f, f.sy + 0.04f, -0.04f), Vector3(hx * 0.5f, f.sy + 0.1f, 0.04f), Vector3(0.95f, 0.45f, 0.1f));
+        break;
+    }
+    case FixtureType::Car: {
+        // Local +z is the nose. Body, greenhouse, bumpers, lights, wheels, mirrors and a number plate.
+        const float length = f.sz, h = f.sy;
+        const Vector3 glass(0.12f, 0.17f, 0.24f);
+        const float bodyTop = h * 0.62f;
+        s.Box("white", Vector3(-hx, 0.28f, -hz), Vector3(hx, bodyTop, hz), c);
+        s.Box("white", Vector3(-hx - 0.02f, 0.22f, -hz - 0.06f), Vector3(hx + 0.02f, 0.5f, -hz + 0.12f), dark);   // bumpers
+        s.Box("white", Vector3(-hx - 0.02f, 0.22f, hz - 0.12f), Vector3(hx + 0.02f, 0.5f, hz + 0.06f), dark);
+        const float bottom[4] = {-hx + 0.06f, -hz + 0.55f, hx - 0.06f, hz - 1.15f};
+        const float top[4] = {-hx + 0.26f, -hz + 1.05f, hx - 0.26f, hz - 1.85f};
+        s.Frustum("white", bodyTop, h, bottom, top, glass, c * 0.92f);
+        for (const float x : {-1.0f, 1.0f}) {
+            s.Box("white", Vector3(x * hx - 0.04f, bodyTop - 0.1f, hz - 1.2f), Vector3(x * hx + 0.04f, bodyTop + 0.04f, hz - 1.05f), dark);               // mirror stalks
+            s.Box("white", Vector3(x * (hx - 0.1f) - 0.01f, 0.58f, hz - 0.01f), Vector3(x * (hx - 0.1f) + 0.01f, 0.64f, hz + 0.03f), Vector3(1.0f, 0.97f, 0.8f), 1.0f);
+        }
+        for (const float x : {-0.62f, 0.62f}) {
+            s.Box("white", Vector3(x - 0.2f, 0.56f, hz - 0.01f), Vector3(x + 0.2f, 0.7f, hz + 0.02f), Vector3(1.0f, 0.97f, 0.82f), 1.0f);               // headlights
+            s.Box("white", Vector3(x - 0.2f, 0.56f, -hz - 0.02f), Vector3(x + 0.2f, 0.68f, -hz + 0.01f), Vector3(0.9f, 0.1f, 0.08f), 0.6f);              // tail lights
+        }
+        s.Box("white", Vector3(-0.26f, 0.38f, -hz - 0.05f), Vector3(0.26f, 0.5f, -hz - 0.02f), Vector3(0.92f, 0.92f, 0.88f));                           // plate
+        for (const float z : {-hz + 0.8f, hz - 0.85f})
+            for (const float x : {-hx, hx}) s.Wheel(x, 0.32f, z, 0.32f, 0.22f, Vector3(0.07f, 0.07f, 0.08f), Vector3(0.62f, 0.64f, 0.68f));
+        (void)length;
         break;
     }
     case FixtureType::Plant: {
@@ -318,11 +411,48 @@ void AddFixture(MeshSet& set, const Fixture& f, float baseY, int roomId)
         break;
     }
     case FixtureType::TreeTrunk: {
+        // Three species, chosen from the tree's position: a broadleaf with a lumpy crown, a conifer of stacked
+        // cones and a narrow poplar. The trunk and every branch are separate shapes so nothing is a lollipop.
         const Vector3 base = Vector3::Transform(Vector3(0, 0, 0), s.world);
-        s.B("bark").AddCylinder(base, f.sx * 0.5f, f.sy * 0.55f, 8, 1.5f, Vector3(0.8f, 0.75f, 0.7f), false);
-        const float r = f.sy * 0.32f;
-        s.B("leaves").AddSphere(base + Vector3(0, f.sy * 0.62f, 0), r, 10, 7, Vector3(0.55f, 0.8f, 0.45f));
-        s.B("leaves").AddSphere(base + Vector3(r * 0.4f, f.sy * 0.82f, r * 0.2f), r * 0.75f, 8, 6, Vector3(0.5f, 0.78f, 0.4f));
+        const float species = s.rng.Uniform();
+        const float tone = 0.85f + 0.3f * s.rng.Uniform();
+        const Vector3 bark(0.8f, 0.75f, 0.7f);
+        if (species < 0.5f) {
+            const float trunk = f.sy * 0.5f;
+            s.B("bark").AddCone(base, f.sx * 0.62f, f.sx * 0.38f, trunk, 8, bark);
+            const float r = f.sy * 0.3f;
+            for (int k = 0; k < 3; ++k) {   // limbs spreading into the crown
+                const float a = static_cast<float>(k) * 2.1f + s.rng.Uniform();
+                AddBar(s.B("bark"), base + Vector3(0, trunk * 0.8f, 0), base + Vector3(std::cos(a) * r * 0.55f, trunk + r * 0.5f, std::sin(a) * r * 0.55f), f.sx * 0.28f, bark);
+            }
+            const Vector3 centre = base + Vector3(0, trunk + r * 0.55f, 0);
+            s.B("leaves").AddSphere(centre, r, 10, 7, Vector3(0.5f, 0.78f, 0.42f) * tone);
+            for (int k = 0; k < 5; ++k) {
+                const float a = static_cast<float>(k) * 1.26f + s.rng.Uniform() * 0.6f;
+                const float rr = r * (0.55f + 0.25f * s.rng.Uniform());
+                s.B("leaves").AddSphere(centre + Vector3(std::cos(a) * r * 0.75f, (s.rng.Uniform() - 0.35f) * r * 0.7f, std::sin(a) * r * 0.75f), rr, 8, 6,
+                                        Vector3(0.45f + 0.1f * s.rng.Uniform(), 0.72f + 0.1f * s.rng.Uniform(), 0.38f) * tone);
+            }
+        } else if (species < 0.78f) {
+            s.B("bark").AddCone(base, f.sx * 0.6f, f.sx * 0.45f, f.sy * 0.22f, 8, bark);
+            float y = f.sy * 0.14f, r = f.sy * 0.27f;
+            for (int k = 0; k < 4; ++k) {
+                const float h = f.sy * 0.3f;
+                s.B("leaves").AddCone(base + Vector3(0, y, 0), r, r * 0.12f, h, 10, Vector3(0.2f, 0.45f, 0.27f) * tone);
+                y += h * 0.55f;
+                r *= 0.76f;
+            }
+        } else {
+            s.B("bark").AddCone(base, f.sx * 0.55f, f.sx * 0.4f, f.sy * 0.2f, 8, bark);
+            float y = f.sy * 0.12f;
+            for (int k = 0; k < 3; ++k) {
+                const float h = f.sy * 0.36f;
+                s.B("leaves").AddCone(base + Vector3(0, y, 0), f.sy * (0.12f - 0.015f * static_cast<float>(k)), f.sy * (0.13f - 0.03f * static_cast<float>(k)), h, 9,
+                                      Vector3(0.42f, 0.66f, 0.3f) * tone);
+                y += h * 0.8f;
+            }
+            s.B("leaves").AddCone(base + Vector3(0, y, 0), f.sy * 0.1f, 0.02f, f.sy * 0.26f, 9, Vector3(0.45f, 0.7f, 0.32f) * tone);
+        }
         break;
     }
     case FixtureType::Hoop: {
@@ -396,14 +526,7 @@ void AddFixture(MeshSet& set, const Fixture& f, float baseY, int roomId)
     }
     case FixtureType::Box:
     default: {
-        if (f.sz > 3.5f && f.sy < 1.6f) {   // a parked car
-            s.Box("white", Vector3(-hx, 0.0f, -hz), Vector3(hx, f.sy * 0.55f, hz), c);
-            s.Box("glass", Vector3(-hx + 0.12f, f.sy * 0.55f, -hz + 1.0f), Vector3(hx - 0.12f, f.sy, hz - 1.4f), Vector3(0.25f, 0.3f, 0.38f));
-            for (const float z : {-hz + 0.7f, hz - 0.8f})
-                for (const float x : {-hx - 0.02f, hx - 0.18f}) s.Box("white", Vector3(x, -0.15f, z - 0.33f), Vector3(x + 0.2f, 0.3f, z + 0.33f), dark);
-        } else {
-            s.Box("white", Vector3(-hx, 0, -hz), Vector3(hx, f.sy, hz), c);
-        }
+        s.Box("white", Vector3(-hx, 0, -hz), Vector3(hx, f.sy, hz), c);
         break;
     }
     }

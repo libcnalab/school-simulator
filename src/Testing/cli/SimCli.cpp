@@ -19,12 +19,14 @@ int main(int argc, char** argv)
     int days = 1;
     double focusX = 82, focusZ = 112;
     int students = -1;
+    std::string roomCode;
     Preset preset = Preset::Normal;
     for (int i = 1; i < argc; ++i) {
         if (!std::strcmp(argv[i], "--validate")) validate = true;
         else if (!std::strcmp(argv[i], "--stats")) stats = true;
         else if (!std::strcmp(argv[i], "--population")) population = true;
         else if (!std::strcmp(argv[i], "--students") && i + 1 < argc) students = std::atoi(argv[++i]);
+        else if (!std::strcmp(argv[i], "--room") && i + 1 < argc) roomCode = argv[++i];
         else if (!std::strcmp(argv[i], "--day")) day = true;
         else if (!std::strcmp(argv[i], "--days") && i + 1 < argc) { day = true; days = std::atoi(argv[++i]); }
         else if (!std::strcmp(argv[i], "--check")) check = true;
@@ -37,6 +39,26 @@ int main(int argc, char** argv)
     }
     const SchoolPlan plan = BuildSchoolPlan();
     int status = 0;
+    if (!roomCode.empty()) {
+        // --room CODE: where a room is and what stands in it (plan coordinates, metres), for placing the camera.
+        bool found = false;
+        const LayoutCache layouts(plan);
+        for (const Room& r : plan.rooms) {
+            if (r.code != roomCode) continue;
+            found = true;
+            std::printf("%s %s: x %.1f..%.1f z %.1f..%.1f, floor y %.1f\n", r.code.c_str(), r.name.c_str(), static_cast<double>(r.rect.x0), static_cast<double>(r.rect.x1),
+                        static_cast<double>(r.rect.z0), static_cast<double>(r.rect.z1), static_cast<double>(plan.FloorY(r.level)));
+            const RoomLayout& l = layouts.Get(r.id);
+            std::printf("door side %d, hub (%.1f, %.1f)\n", static_cast<int>(l.doorSide), static_cast<double>(l.hub.x), static_cast<double>(l.hub.z));
+            for (const Fixture& f : l.fixtures)
+                std::printf("  fixture %2d at (%.1f, %.1f) y0 %.2f size %.2f x %.2f x %.2f yaw %.2f\n", static_cast<int>(f.type), static_cast<double>(f.pos.x),
+                            static_cast<double>(f.pos.z), static_cast<double>(f.y0), static_cast<double>(f.sx), static_cast<double>(f.sy), static_cast<double>(f.sz), static_cast<double>(f.yaw));
+        }
+        if (!found) {
+            std::fprintf(stderr, "no room with code '%s'\n", roomCode.c_str());
+            status = 1;
+        }
+    }
     if (validate || stats) {
         const std::vector<std::string> errors = ValidatePlan(plan);
         for (std::size_t i = 0; i < errors.size() && i < 60; ++i) std::fprintf(stderr, "invalid: %s\n", errors[i].c_str());
