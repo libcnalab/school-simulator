@@ -324,6 +324,7 @@ private:
     int nextDrill_ = 0;
     bool drillToday_ = true;
     DrillStatus drill_;
+    double drillReturnUntil_ = -1.0;   // arrivals before this are people coming back from a drill, not latecomers
     SimStats stats_;
     // per-checkpoint allocators (reset at each checkpoint)
     std::unordered_map<int, int> idleCounter_;

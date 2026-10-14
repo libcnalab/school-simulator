@@ -217,13 +217,18 @@ void WorldRenderer::Draw(const DrawContext& ctx, const WorldLighting& light, con
             DrawBatches(ctx, lr->opaque, false);
             ++stats_.roomsDrawn;
         }
-    // Indoors: the baked lights are the room's own, independent of the time of day.
-    fx.setDiffuseColorProperty(Vector3(1, 1, 1));
+    // Indoors: the baked lights are the room's own; a room whose lights are off keeps only the daylight from its windows.
     for (const LoadedRoom* lr : visible)
         if (!lr->outdoor) {
+            float on = 1.0f;
+            if (light.roomLight != nullptr && lr->id < static_cast<int>(light.roomLight->size())) on = (*light.roomLight)[static_cast<std::size_t>(lr->id)];
+            const float dark = 0.12f + 0.5f * light.daylight;   // what a dark room looks like: daylight through the windows
+            const float k = dark + (1.0f - dark) * on;
+            fx.setDiffuseColorProperty(Vector3(k, k, k * 1.03f));
             DrawBatches(ctx, lr->opaque, false);
             ++stats_.roomsDrawn;
         }
+    fx.setDiffuseColorProperty(Vector3(1, 1, 1));
 
     DrawDoors(ctx, light, doors);
     DrawElevators(ctx, elevators);

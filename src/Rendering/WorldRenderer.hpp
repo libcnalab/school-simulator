@@ -26,11 +26,13 @@ struct WorldStats {
     float buildMilliseconds = 0.0f;
 };
 
-/** Daylight for the outdoor geometry. */
+/** Daylight for the outdoor geometry and the state of the lights indoors. */
 struct WorldLighting {
     Microsoft::Xna::Framework::Vector3 outdoorTint{1, 1, 1};   // multiplies baked outdoor colours
     Microsoft::Xna::Framework::Vector3 sunDirection{0, -1, 0}; // towards the scene (for lit door leaves)
     float daylight = 1.0f;
+    /** Per room: 1 = lights on, 0 = dark (only the daylight through the windows). Empty = everything lit. */
+    const std::vector<float>* roomLight = nullptr;
 };
 
 class WorldRenderer {

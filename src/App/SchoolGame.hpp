@@ -138,6 +138,7 @@ private:
     std::set<std::string> drawErrorsSeen_;
     NpcDrawStats npcStats_;
     std::vector<School::ElevatorStatus> elevators_;
+    std::vector<float> roomLight_;   // per room, 0..1, eased towards the wanted state
     int ridingShaft_ = -1;
     void UpdateElevators();
 };

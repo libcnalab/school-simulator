@@ -249,7 +249,8 @@ void SchoolSim::Arrive(int npc)
             drill_.lastDuration = time_ - drill_.startedAt;
         }
     }
-    if (n.role == Role::Student && g.activity == Activity::InLesson && schedule_.At(phase_).kind == PhaseKind::Lesson && time_ - schedule_.At(phase_).start > 30.0) ++stats_.lateArrivals;
+    if (n.role == Role::Student && g.activity == Activity::InLesson && schedule_.At(phase_).kind == PhaseKind::Lesson && time_ - schedule_.At(phase_).start > 30.0 && time_ > drillReturnUntil_)
+        ++stats_.lateArrivals;
     if (g.dine) {
         // Served after a wait that depends on the line; then to a table.
         const std::vector<RoomId> cafs = plan_.RoomsOfType(RoomType::Cafeteria);
@@ -647,7 +648,8 @@ void SchoolSim::StepFull(int npc, float dt)
     }
 
     // --- door gate: wait at the approach point until the door is open and it is our turn
-    if (wp.kind == WaypointKind::DoorApproach && dist < 0.45f && plan_.door(wp.door).kind == DoorKind::ElevatorDoor) {
+    constexpr float kGateReach = 0.8f;   // a crowd at a door: whoever is within this of the approach point is "at" the door
+    if (wp.kind == WaypointKind::DoorApproach && dist < kGateReach && plan_.door(wp.door).kind == DoorKind::ElevatorDoor) {
         const DoorId did = wp.door;
         const Door& def = plan_.door(did);
         const RoomId cab = plan_.room(def.a).type == RoomType::ElevatorCab ? def.a : def.b;
@@ -680,7 +682,7 @@ void SchoolSim::StepFull(int npc, float dt)
         ++a.leg;
         return;
     }
-    if (wp.kind == WaypointKind::DoorApproach && dist < 0.45f) {
+    if (wp.kind == WaypointKind::DoorApproach && dist < kGateReach) {
         const DoorId did = wp.door;
         const Door& def = plan_.door(did);
         DoorRuntime& d = doors_[static_cast<std::size_t>(did)];
@@ -832,6 +834,7 @@ void SchoolSim::EndDrill()
     const double duration = drill_.allAssembledAt >= 0.0 ? drill_.allAssembledAt - drill_.startedAt : drill_.lastDuration;
     drill_.active = false;
     drill_.lastDuration = duration;
+    drillReturnUntil_ = time_ + 900.0;
     // Back to the schedule.
     idleCounter_.clear();
     AssignGoals(phase_, sub_, true);

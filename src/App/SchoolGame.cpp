@@ -855,6 +855,27 @@ void SchoolGame::Draw(const GameTime& gameTime)
     light.sunDirection = -timeOfDay_.SunDirection();
     light.outdoorTint = Vector3::Clamp(timeOfDay_.AmbientColor() * 0.9f + sun * 0.75f + Vector3(0.08f, 0.08f, 0.1f), Vector3(0.12f, 0.13f, 0.18f), Vector3(1, 1, 1));
     light.outdoorTint = light.outdoorTint * (1.0f - 0.4f * overcast);
+    // Lights: on in every room while the school is open and it is dark; otherwise only where somebody is. Eased so a
+    // switch is a quick fade, not a pop.
+    {
+        const bool open = sim_->Schedule().At(sim_->PhaseIndex()).kind != School::PhaseKind::Night;
+        const bool dim = day < 0.55f;
+        if (roomLight_.size() != plan_.rooms.size()) roomLight_.assign(plan_.rooms.size(), 1.0f);
+        const float dt = std::min(0.1f, static_cast<float>(gameTime.getElapsedGameTimeProperty().getTotalMillisecondsProperty()) / 1000.0f);
+        for (const RoomId id : world_->LoadedRooms()) {
+            const Room& r = plan_.room(id);
+            if (!r.Indoor()) continue;
+            const bool circulation = School::Info(r.type).circulation;
+            const bool occupied = sim_->OccupantsOf(id) > 0 || id == currentRoom_;
+            float want;
+            if (!dim) want = 1.0f;                       // daylight: the lights hardly matter, keep the rooms bright
+            else if (open) want = circulation || occupied ? 1.0f : 0.0f;
+            else want = occupied ? 1.0f : (r.type == RoomType::ServerRoom || r.type == RoomType::SecurityOffice ? 1.0f : 0.0f);
+            float& v = roomLight_[static_cast<std::size_t>(id)];
+            v += (want - v) * std::min(1.0f, dt * 4.0f);
+        }
+        light.roomLight = &roomLight_;
+    }
     const Vector3 fogColour = Vector3::Lerp(Vector3::Lerp(Vector3(0.03f, 0.04f, 0.09f), Vector3(0.74f, 0.82f, 0.92f), day), Vector3(0.55f, 0.57f, 0.6f) * (0.2f + 0.8f * day), overcast);
     const bool foggy = options_.weather == "fog";
     for (BasicEffect* fx : {&effects_->World(), &effects_->Lit()}) {
