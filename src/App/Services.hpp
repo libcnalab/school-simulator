@@ -41,6 +41,7 @@ struct FrameStats {
     // world
     int roomsLoaded = 0;
     int roomsDrawn = 0;
+    int roomsCulled = 0;
     int roomsBuiltTotal = 0;
     int trianglesDrawn = 0;
     int drawCalls = 0;

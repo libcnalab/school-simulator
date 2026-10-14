@@ -914,10 +914,17 @@ RoomGeometry BuildRoomGeometry(const SchoolPlan& plan, const School::LayoutCache
                 b.AddBoxTransformed(Matrix::CreateTranslation(0, 0, 0), Vector3::Min(at - u * 0.04f - Vector3(0, 0.04f, 0), at + u * 0.04f + n * 0.012f + Vector3(0, 0.04f, 0)),
                                     Vector3::Max(at - u * 0.04f - Vector3(0, 0.04f, 0), at + u * 0.04f + n * 0.012f + Vector3(0, 0.04f, 0)), 0.0f, Vector3(0.95f, 0.95f, 0.93f));
             }
-        // Door frames: jambs and a lintel, added by the room that is `a` of the door.
+        // Door frames: jambs and a lintel. The frame sits symmetrically on the wall plane, so either room can build it:
+        // between a corridor and a room it is the corridor (the room behind a closed door is not drawn, the frame must be),
+        // otherwise the room that is `a` of the door.
         for (const DoorId did : room.doors) {
             const Door& d = plan.door(did);
-            if (d.a != id || SideOfDoor(d, id) != side || d.kind == DoorKind::Opening) continue;
+            if (SideOfDoor(d, id) != side || d.kind == DoorKind::Opening) continue;
+            RoomId owner = d.a;
+            const Room& ra = plan.room(d.a);
+            const Room& rb = plan.room(d.b);
+            if (ra.Indoor() && rb.Indoor() && School::Info(ra.type).circulation != School::Info(rb.type).circulation) owner = School::Info(ra.type).circulation ? d.a : d.b;
+            if (owner != id) continue;
             const float c = AlongWall(r, side, d.pos);
             MeshBuilder& b = set.Opaque("white");
             const Vector3 ft = d.kind == DoorKind::External || d.kind == DoorKind::Gate ? Vector3(0.3f, 0.3f, 0.32f) : Tint(wing.accent) * 0.9f;

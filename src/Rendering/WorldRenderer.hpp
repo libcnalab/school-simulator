@@ -19,6 +19,8 @@
 struct WorldStats {
     int roomsLoaded = 0;
     int roomsDrawn = 0;
+    int corridorGroupsDrawn = 0;
+    int roomsCulled = 0;   // inside the frustum but out of sight: no open door leads to them
     int roomsBuiltTotal = 0;
     int trianglesDrawn = 0;
     int drawCalls = 0;
@@ -66,6 +68,10 @@ public:
     /** Radius within which rooms on the player's level are kept loaded. */
     float loadRadius = 70.0f;
     float adjacentLevelRadius = 36.0f;
+    /** Longest run of corridor segments drawn as one mesh (1 turns the merging off). */
+    int maxGroupSegments = 3;
+    /** Rooms that no open door leads to are not drawn (off: SCHOOL_PORTAL_CULLING=0). */
+    bool portalCulling = true;
     int maxLoaded = 240;
     int buildsPerFrame = 3;
 
@@ -82,6 +88,8 @@ private:
         bool outdoor = false;
         int triangles = 0;
         float distance = 0.0f;
+        int group = -1;          // corridor group, or -1
+        bool follower = false;   // a member of a group whose geometry is drawn with the group's first member
     };
     struct Chunk {
         Microsoft::Xna::Framework::BoundingBox bounds;
@@ -92,6 +100,12 @@ private:
     void Upload(const MeshSet& set, const std::vector<BakedLight>& lights, const Microsoft::Xna::Framework::Vector3& ambient, std::vector<Batch>& opaque,
                 std::vector<Batch>& transparent, Microsoft::Xna::Framework::BoundingBox& bounds, int& triangles);
     void Build(School::RoomId room);
+    /** Builds every member of a corridor group at once; the first member holds the merged batches. */
+    void BuildGroup(int group);
+    void FindCorridorGroups();
+    /** Rooms the eye can see: the room it is in, those reachable through doors that are open (or glass) and in the view,
+     *  nearby rooms (a safety margin), and windowed rooms when looking out. False = the eye is in no room: draw all. */
+    bool ComputePortalVisibility(const DrawContext& ctx, const std::vector<School::DoorRuntime>& doors, std::vector<char>& seen) const;
     float DistanceTo(const School::Room& room, const Microsoft::Xna::Framework::Vector3& eye) const;
     void DrawBatches(const DrawContext& ctx, const std::vector<Batch>& batches, bool transparent);
     void DrawDoors(const DrawContext& ctx, const WorldLighting& light, const std::vector<School::DoorRuntime>& doors);
@@ -110,6 +124,9 @@ private:
     std::unordered_map<int, std::unique_ptr<LoadedRoom>> rooms_;
     std::vector<School::RoomId> loadedList_;
     std::vector<Chunk> facade_;
+    // Adjacent corridor segments of one wing and level, built and drawn together: far fewer draw calls in a long hall.
+    std::vector<std::vector<School::RoomId>> groups_;
+    std::vector<int> groupOf_;   // per room, index into groups_ or -1
     std::vector<School::RoomId> buildQueue_;
     WorldStats stats_;
     Microsoft::Xna::Framework::Vector3 lastEye_;

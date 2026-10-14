@@ -450,6 +450,7 @@ void SchoolGame::UpdateFrameStats(float dt)
     const WorldStats& w = world_->Stats();
     stats_.roomsLoaded = w.roomsLoaded;
     stats_.roomsDrawn = w.roomsDrawn;
+    stats_.roomsCulled = w.roomsCulled;
     stats_.roomsBuiltTotal = w.roomsBuiltTotal;
     stats_.trianglesDrawn = w.trianglesDrawn;
     stats_.drawCalls = w.drawCalls;
@@ -850,7 +851,7 @@ std::vector<std::string> SchoolGame::StatsLines() const
     std::snprintf(buf, sizeof buf, "people %d  on campus %d  walking %d (full %d, reduced %d, abstract %d)  drawn %d (%d detailed)", stats_.npcTotal, stats_.npcOnCampus, stats_.npcWalking,
                   stats_.npcFull, ss.reduced, ss.abstract, stats_.npcDrawn, stats_.npcDrawnDetailed);
     out.emplace_back(buf);
-    std::snprintf(buf, sizeof buf, "rooms loaded %d  drawn %d  built %d  build %.1f ms  doors %d", stats_.roomsLoaded, stats_.roomsDrawn, stats_.roomsBuiltTotal,
+    std::snprintf(buf, sizeof buf, "rooms loaded %d  drawn %d  culled %d  built %d  build %.1f ms  doors %d", stats_.roomsLoaded, stats_.roomsDrawn, stats_.roomsCulled, stats_.roomsBuiltTotal,
                   static_cast<double>(stats_.buildMilliseconds), stats_.doorsDrawn);
     out.emplace_back(buf);
     std::snprintf(buf, sizeof buf, "triangles %d  draw calls %d  textures %d  voices %d  loops %d  particles %d  screens/frame %d  cctv %s", stats_.trianglesDrawn, stats_.drawCalls,

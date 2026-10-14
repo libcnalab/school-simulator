@@ -136,7 +136,21 @@ public:
     [[nodiscard]] const std::map<std::string, Group>& TransparentMeshes() const { return transparent_; }
     [[nodiscard]] bool Empty() const { return opaque_.empty() && transparent_.empty(); }
 
+    /** Appends another set's geometry texture by texture (corridor segments that are drawn as one). */
+    void Merge(const MeshSet& other)
+    {
+        for (const auto& [texture, group] : other.opaque_)
+            for (const MeshBuilder& b : group) Add(opaque_[texture], b);
+        for (const auto& [texture, group] : other.transparent_)
+            for (const MeshBuilder& b : group) Add(transparent_[texture], b);
+    }
+
 private:
+    static void Add(Group& g, const MeshBuilder& b)
+    {
+        if (g.empty() || g.back().VertexCount() + b.VertexCount() > 65000) g.emplace_back();
+        g.back().Append(b);
+    }
     static MeshBuilder& Current(Group& g)
     {
         if (g.empty() || g.back().VertexCount() > 60000) g.emplace_back();

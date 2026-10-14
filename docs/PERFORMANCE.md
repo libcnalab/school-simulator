@@ -36,6 +36,33 @@ elevator cab part, one batch of up to 2 730 boxes for the people, and one per sc
 all of this far above 60 fps; the first thing to measure there is the number of rooms drawn in long corridor
 views (`F3`: `rooms drawn`) and whether merging corridor segments per wing is worth it.
 
+## Draw calls: corridor groups and portal culling (2026-10-14)
+
+Two measures against the draw-call count in long halls (`WorldRenderer`):
+
+- **Corridor groups**: up to three touching segments of one corridor (same wing, level and axis) are built, baked and
+  drawn as one mesh (`FindCorridorGroups`, `BuildGroup`); 49 groups for 157 segments. A group is loaded and dropped as
+  a whole and shines as brightly as its brightest segment. Alone it saved about 8 % of the calls: most of the calls
+  were rooms behind the corridor walls.
+- **Portal culling** (`ComputePortalVisibility`): a room is drawn only if the eye is in it, within 3 m of it, or an open
+  door (or an opening, or glass) in the view leads to it, up to 12 doors deep; rooms with windows count as visible from
+  rooms that have windows themselves and from outdoors. Inside the frustum but unreachable: culled. Interior walls have
+  no windows, so nothing visible is lost; the door frames moved to the corridor side of the wall for that reason
+  (they used to belong to the room behind the door).
+
+Measured at `--preset normal --fixed-step 0.016` (F3 / `stats`), draw calls and triangles:
+
+| View | before | corridor groups | + portal culling |
+|---|---|---|---|
+| N2.07 looking west | 333 / 90 500 | 314 / 89 200 | 107 / 50 200 |
+| N2.07 looking east | 520 / 104 000 | 478 / 101 000 | 104 / 23 300 |
+| cafeteria at lunch | 144 / 112 500 | - | 76 / 53 800 |
+
+Ten views were rendered with the culling on and off and compared pixel by pixel: no difference beyond a few edge
+pixels of animated doors (`tools/tour.sh` and `docs/RENDERER_TESTING.md` use the same views). Knobs for comparing:
+`SCHOOL_PORTAL_CULLING=0` and `SCHOOL_CORRIDOR_SEGMENTS=1` switch the two off. The F3 line `rooms loaded .. drawn ..
+culled ..` shows the effect.
+
 ## Determinism
 
 `tools/determinism.sh`: two runs with `--fixed-step 0.05` reach the same digest (`SchoolSim::Digest`, a hash

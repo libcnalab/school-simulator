@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <chrono>
 #include <cmath>
+#include <cstdlib>
 
 #include "App/Log.hpp"
 #include "Microsoft/Xna/Framework/BoundingSphere.hpp"
@@ -46,7 +47,54 @@ WorldRenderer::WorldRenderer(Services& services, const School::SchoolPlan& plan,
             if (f.type == School::FixtureType::Lamp) lamps_.push_back({Vector3(f.pos.x, plan.FloorY(r.level) + f.y0 + f.sy - 0.27f, f.pos.z), plan.FloorY(r.level)});
     }
     const double ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();
-    School::Log("world", "facade built: %zu chunks, %zu lamp posts, in %.0f ms", facade_.size(), lamps_.size(), ms);
+    if (const char* env = std::getenv("SCHOOL_CORRIDOR_SEGMENTS")) maxGroupSegments = std::max(1, std::atoi(env));   // 1 switches the merging off
+    if (const char* env = std::getenv("SCHOOL_PORTAL_CULLING")) portalCulling = std::atoi(env) != 0;
+    FindCorridorGroups();
+    School::Log("world", "facade built: %zu chunks, %zu lamp posts, %zu corridor groups, in %.0f ms", facade_.size(), lamps_.size(), groups_.size(), ms);
+}
+
+void WorldRenderer::FindCorridorGroups()
+{
+    groupOf_.assign(plan_.rooms.size(), -1);
+    groups_.clear();
+    if (maxGroupSegments < 2) return;
+    // Corridor segments that lie in one line (same wing, level and axis, same cross position) and touch each other.
+    struct Seg {
+        RoomId id;
+        float cross, from, to;
+        int wing, level;
+        bool alongX;
+    };
+    std::vector<Seg> segs;
+    for (const Room& r : plan_.rooms) {
+        if (r.type != School::RoomType::Corridor) continue;
+        const bool alongX = r.rect.Width() >= r.rect.Depth();
+        segs.push_back({r.id, alongX ? r.rect.Center().z : r.rect.Center().x, alongX ? r.rect.x0 : r.rect.z0, alongX ? r.rect.x1 : r.rect.z1, r.wing, r.level, alongX});
+    }
+    std::sort(segs.begin(), segs.end(), [](const Seg& a, const Seg& b) {
+        if (a.wing != b.wing) return a.wing < b.wing;
+        if (a.level != b.level) return a.level < b.level;
+        if (a.alongX != b.alongX) return a.alongX < b.alongX;
+        if (std::fabs(a.cross - b.cross) > 0.5f) return a.cross < b.cross;
+        return a.from < b.from;
+    });
+    std::vector<RoomId> run;
+    const auto flush = [&] {
+        if (run.size() >= 2) {
+            for (const RoomId id : run) groupOf_[static_cast<std::size_t>(id)] = static_cast<int>(groups_.size());
+            groups_.push_back(run);
+        }
+        run.clear();
+    };
+    const Seg* prev = nullptr;
+    for (const Seg& sg : segs) {
+        const bool continues = prev != nullptr && prev->wing == sg.wing && prev->level == sg.level && prev->alongX == sg.alongX && std::fabs(prev->cross - sg.cross) <= 0.5f &&
+                               std::fabs(prev->to - sg.from) <= 0.3f && static_cast<int>(run.size()) < maxGroupSegments;
+        if (!continues) flush();
+        run.push_back(sg.id);
+        prev = &sg;
+    }
+    flush();
 }
 
 void WorldRenderer::DrawLamps(const DrawContext& ctx, const WorldLighting& light)
@@ -138,9 +186,45 @@ void WorldRenderer::Upload(const MeshSet& set, const std::vector<BakedLight>& li
     if (first) bounds = BoundingBox(Vector3::Zero, Vector3::Zero);
 }
 
+void WorldRenderer::BuildGroup(int group)
+{
+    const std::vector<RoomId>& members = groups_[static_cast<std::size_t>(group)];
+    RoomGeometry merged;
+    bool first = true;
+    for (const RoomId m : members) {
+        RoomGeometry g = BuildRoomGeometry(plan_, layouts_, m);
+        merged.meshes.Merge(g.meshes);
+        merged.lights.insert(merged.lights.end(), g.lights.begin(), g.lights.end());
+        if (first) merged.ambient = g.ambient;
+        first = false;
+    }
+    auto lead = std::make_unique<LoadedRoom>();
+    lead->id = members.front();
+    lead->group = group;
+    Upload(merged.meshes, merged.lights, merged.ambient, lead->opaque, lead->transparent, lead->bounds, lead->triangles);
+    for (const RoomId m : members) lead->bounds = BoundingBox::CreateMerged(lead->bounds, RoomBounds(m));
+    for (std::size_t i = 1; i < members.size(); ++i) {
+        auto follower = std::make_unique<LoadedRoom>();
+        follower->id = members[i];
+        follower->group = group;
+        follower->follower = true;
+        follower->bounds = RoomBounds(members[i]);
+        rooms_[members[i]] = std::move(follower);
+        loadedList_.push_back(members[i]);
+        ++stats_.roomsBuiltTotal;
+    }
+    rooms_[members.front()] = std::move(lead);
+    loadedList_.push_back(members.front());
+    ++stats_.roomsBuiltTotal;
+}
+
 void WorldRenderer::Build(RoomId id)
 {
     if (rooms_.count(id)) return;
+    if (const int group = groupOf_.empty() ? -1 : groupOf_[static_cast<std::size_t>(id)]; group >= 0) {
+        BuildGroup(group);
+        return;
+    }
     auto lr = std::make_unique<LoadedRoom>();
     lr->id = id;
     const RoomGeometry g = BuildRoomGeometry(plan_, layouts_, id);
@@ -208,11 +292,17 @@ void WorldRenderer::Update(const Vector3& eye, int level, float dt, const std::v
         }
         std::sort(wanted.begin(), wanted.end(), [](const Want& a, const Want& b) { return a.score < b.score; });
         if (static_cast<int>(wanted.size()) > maxLoaded) wanted.resize(static_cast<std::size_t>(maxLoaded));
+        // A corridor group is wanted as a whole (its geometry is one mesh), so one wanted member brings the others along.
         std::unordered_set<int> keep;
         buildQueue_.clear();
+        const auto want = [&](RoomId id) {
+            if (!keep.insert(id).second) return;
+            if (!rooms_.count(id)) buildQueue_.push_back(id);
+        };
         for (const Want& w : wanted) {
-            keep.insert(w.id);
-            if (!rooms_.count(w.id)) buildQueue_.push_back(w.id);
+            want(w.id);
+            if (const int g = groupOf_[static_cast<std::size_t>(w.id)]; g >= 0)
+                for (const RoomId m : groups_[static_cast<std::size_t>(g)]) want(m);
         }
         // Drop what is no longer wanted.
         for (auto it = rooms_.begin(); it != rooms_.end();) {
@@ -246,6 +336,59 @@ void WorldRenderer::DrawBatches(const DrawContext& ctx, const std::vector<Batch>
     }
 }
 
+bool WorldRenderer::ComputePortalVisibility(const DrawContext& ctx, const std::vector<School::DoorRuntime>& doors, std::vector<char>& seen) const
+{
+    const Vector3 eye = ctx.view.eye;
+    const School::Vec2 p{eye.X, eye.Z};
+    seen.assign(plan_.rooms.size(), 0);
+    std::vector<std::pair<RoomId, int>> queue;
+    const auto add = [&](RoomId id, int depth) {
+        if (seen[static_cast<std::size_t>(id)]) return;
+        seen[static_cast<std::size_t>(id)] = 1;
+        queue.emplace_back(id, depth);
+    };
+    bool eyeRoomHasWindows = false, found = false;
+    for (const auto& [id, lr] : rooms_) {
+        const Room& r = plan_.room(id);
+        const float y0 = plan_.FloorY(r.level);
+        const float top = y0 + (r.Indoor() ? static_cast<float>(r.levels) * School::kFloorHeight : 8.0f);
+        const School::Vec2 c = r.rect.Clamp(p);
+        const float flat = School::Distance(p, c);
+        const bool inside = flat < 0.001f && eye.Y >= y0 - 0.3f && eye.Y <= top;
+        if (inside) {
+            found = true;
+            eyeRoomHasWindows = eyeRoomHasWindows || r.exteriorSides != 0 || !r.Indoor();
+            add(id, 0);
+        } else if (r.Indoor() && flat < 3.0f && eye.Y >= y0 - 0.3f && eye.Y <= top) {
+            add(id, 1);   // a metre or two from the eye: always drawn, whatever the doors say
+        }
+    }
+    if (!found) return false;   // in no room (free flight, a wall): draw everything in the view
+    for (std::size_t head = 0; head < queue.size(); ++head) {
+        const auto [id, depth] = queue[head];
+        if (depth >= 12) continue;
+        for (const School::DoorId did : plan_.room(id).doors) {
+            const Door& d = plan_.door(did);
+            const RoomId other = d.Other(id);
+            if (other == School::kNone || seen[static_cast<std::size_t>(other)]) continue;
+            const float open = did < static_cast<int>(doors.size()) ? doors[static_cast<std::size_t>(did)].open : 0.0f;
+            const bool see = !d.Leaf() || d.kind == DoorKind::Automatic || d.kind == DoorKind::Gate || open > 0.02f;
+            if (!see) continue;
+            const float y0 = plan_.FloorY(d.level);
+            const Vector3 centre(d.pos.x, y0 + School::kDoorHeight * 0.5f, d.pos.z);
+            const BoundingBox bb(centre - Vector3(d.width * 0.5f + 0.3f, School::kDoorHeight * 0.5f, d.width * 0.5f + 0.3f), centre + Vector3(d.width * 0.5f + 0.3f, School::kDoorHeight * 0.5f, d.width * 0.5f + 0.3f));
+            if (!ctx.view.frustum.Intersects(bb)) continue;
+            add(other, depth + 1);
+        }
+    }
+    // Windows: from outdoors (or from a room with a window) the rooms along the facades can be seen across the campus.
+    for (const auto& [id, lr] : rooms_) {
+        const Room& r = plan_.room(id);
+        if (r.Indoor() && r.exteriorSides != 0 && (eyeRoomHasWindows)) seen[static_cast<std::size_t>(id)] = 1;
+    }
+    return true;
+}
+
 void WorldRenderer::Draw(const DrawContext& ctx, const WorldLighting& light, const std::vector<School::DoorRuntime>& doors, const std::vector<School::ElevatorStatus>& elevators)
 {
     stats_.roomsDrawn = 0;
@@ -265,8 +408,20 @@ void WorldRenderer::Draw(const DrawContext& ctx, const WorldLighting& light, con
     for (const Chunk& c : facade_)
         if (ctx.view.frustum.Intersects(c.bounds)) DrawBatches(ctx, c.opaque, false);
     std::vector<const LoadedRoom*> visible;
+    std::vector<char> portal;
+    const bool portalValid = portalCulling && ComputePortalVisibility(ctx, doors, portal);
+    stats_.roomsCulled = 0;
     for (const auto& [id, lr] : rooms_) {
         if (!ctx.view.frustum.Intersects(lr->bounds)) continue;
+        if (portalValid && !lr->outdoor && !lr->follower) {
+            bool seen = portal[static_cast<std::size_t>(id)] != 0;
+            if (!seen && lr->group >= 0)
+                for (const RoomId m : groups_[static_cast<std::size_t>(lr->group)]) seen = seen || portal[static_cast<std::size_t>(m)] != 0;
+            if (!seen) {
+                ++stats_.roomsCulled;
+                continue;
+            }
+        }
         visible.push_back(lr.get());
     }
     for (const LoadedRoom* lr : visible)
@@ -275,10 +430,18 @@ void WorldRenderer::Draw(const DrawContext& ctx, const WorldLighting& light, con
             ++stats_.roomsDrawn;
         }
     // Indoors: the baked lights are the room's own; a room whose lights are off keeps only the daylight from its windows.
+    stats_.corridorGroupsDrawn = 0;
     for (const LoadedRoom* lr : visible)
-        if (!lr->outdoor) {
+        if (!lr->outdoor && !lr->follower) {
             float on = 1.0f;
-            if (light.roomLight != nullptr && lr->id < static_cast<int>(light.roomLight->size())) on = (*light.roomLight)[static_cast<std::size_t>(lr->id)];
+            if (light.roomLight != nullptr && lr->id < static_cast<int>(light.roomLight->size())) {
+                on = (*light.roomLight)[static_cast<std::size_t>(lr->id)];
+                // A corridor group shines as brightly as its brightest segment.
+                if (lr->group >= 0) {
+                    ++stats_.corridorGroupsDrawn;
+                    for (const RoomId m : groups_[static_cast<std::size_t>(lr->group)]) on = std::max(on, (*light.roomLight)[static_cast<std::size_t>(m)]);
+                }
+            }
             const float dark = 0.12f + 0.5f * light.daylight;   // what a dark room looks like: daylight through the windows
             const float k = dark + (1.0f - dark) * on;
             fx.setDiffuseColorProperty(Vector3(k, k, k * 1.03f));
