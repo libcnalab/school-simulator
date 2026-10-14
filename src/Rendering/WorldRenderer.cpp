@@ -189,7 +189,7 @@ void WorldRenderer::DrawBatches(const DrawContext& ctx, const std::vector<Batch>
     }
 }
 
-void WorldRenderer::Draw(const DrawContext& ctx, const WorldLighting& light, const std::vector<School::DoorRuntime>& doors)
+void WorldRenderer::Draw(const DrawContext& ctx, const WorldLighting& light, const std::vector<School::DoorRuntime>& doors, const std::vector<School::ElevatorStatus>& elevators)
 {
     stats_.roomsDrawn = 0;
     stats_.trianglesDrawn = 0;
@@ -226,6 +226,7 @@ void WorldRenderer::Draw(const DrawContext& ctx, const WorldLighting& light, con
         }
 
     DrawDoors(ctx, light, doors);
+    DrawElevators(ctx, elevators);
 
     // Glass last, without depth writes, so panes blend over what is behind them.
     RenderStates::SetTransparent3D(device, BlendState::NonPremultiplied);
@@ -275,18 +276,18 @@ void WorldRenderer::DrawDoors(const DrawContext& ctx, const WorldLighting& light
             const char* tex = d.kind == DoorKind::External || d.kind == DoorKind::ElevatorDoor ? "door_metal" : d.kind == DoorKind::Automatic || d.kind == DoorKind::Gate ? "glass" : "door_wood";
             lit.setTextureProperty(s_.textures->Get(tex));
             lit.setDiffuseColorProperty(d.kind == DoorKind::Gate ? Vector3(0.4f, 0.45f, 0.5f) : Vector3(0.95f, 0.95f, 0.95f));
-            const bool twoLeaves = d.kind == DoorKind::Double || d.kind == DoorKind::External || d.kind == DoorKind::Automatic || d.kind == DoorKind::Gate;
+            const bool twoLeaves = d.kind == DoorKind::Double || d.kind == DoorKind::External || d.kind == DoorKind::Automatic || d.kind == DoorKind::Gate || d.kind == DoorKind::ElevatorDoor;
             const int leaves = twoLeaves ? 2 : 1;
             const float leafW = twoLeaves ? d.width * 0.5f - 0.015f : d.width - 0.03f;
             const float h = (d.kind == DoorKind::Gate ? 1.6f : School::kDoorHeight) - 0.03f;
-            const float t = d.kind == DoorKind::Automatic ? 0.03f : 0.05f;
+            const float t = d.kind == DoorKind::Automatic ? 0.03f : d.kind == DoorKind::ElevatorDoor ? 0.04f : 0.05f;
             for (int leaf = 0; leaf < leaves; ++leaf) {
                 // hinge at an end of the opening; a single door hinges on the side the plan says
                 const float side = leaves == 2 ? (leaf == 0 ? -1.0f : 1.0f) : (d.hingeLeft ? -1.0f : 1.0f);
                 const School::Vec2 hinge = d.pos + along * (side * d.width * 0.5f);
                 const School::Vec2 dir = along * (-side);   // from the hinge towards the other jamb
                 Matrix world;
-                if (d.kind == DoorKind::Automatic) {
+                if (d.kind == DoorKind::Automatic || d.kind == DoorKind::ElevatorDoor) {
                     // sliding: the leaf retreats along the wall
                     const School::Vec2 c = hinge + dir * (leafW * 0.5f - open * leafW);
                     const float yaw = std::atan2(-dir.z, dir.x);
@@ -313,4 +314,53 @@ void WorldRenderer::DrawDoors(const DrawContext& ctx, const WorldLighting& light
         }
     }
     (void)light;
+}
+
+void WorldRenderer::DrawElevators(const DrawContext& ctx, const std::vector<School::ElevatorStatus>& elevators)
+{
+    // The cab: a metal box open towards the entry side, carried up and down the shaft at the simulation's height.
+    if (elevators.empty()) return;
+    BasicEffect& lit = ctx.fx.BeginLit(nullptr);
+    lit.setViewProperty(ctx.view.view);
+    lit.setProjectionProperty(ctx.view.projection);
+    lit.setAmbientLightColorProperty(Vector3(0.62f, 0.62f, 0.68f));
+    lit.setEmissiveColorProperty(Vector3(0.05f, 0.05f, 0.06f));
+    lit.setAlphaProperty(1.0f);
+    const LitMesh& cube = s_.shapes->Cube();
+    for (const School::ElevatorStatus& st : elevators) {
+        if (st.shaft < 0 || st.shaft >= static_cast<int>(plan_.elevators.size())) continue;
+        const School::ElevatorShaft& e = plan_.elevators[static_cast<std::size_t>(st.shaft)];
+        const School::Vec2 c = e.footprint.Center();
+        const Vector3 centre(c.x, st.y + 1.2f, c.z);
+        if (Vector3::DistanceSquared(centre, ctx.view.eye) > 70.0f * 70.0f) continue;
+        if (!ctx.view.frustum.Intersects(BoundingBox(centre - Vector3(1.5f, 1.3f, 1.5f), centre + Vector3(1.5f, 1.3f, 1.5f)))) continue;
+        const School::Vec2 n = School::SideNormal(e.entrySide);   // towards the doors
+        const School::Vec2 along = n.RightHand();
+        const float w = e.footprint.Width(), d = e.footprint.Depth();
+        const float inner = 0.08f;
+        const float yaw = std::atan2(-n.x, -n.z);                    // local -z faces the doors... local +z is the back
+        const Matrix frame = Matrix::CreateRotationY(yaw) * Matrix::CreateTranslation(c.x, st.y, c.z);
+        const float W = (e.entrySide == School::Side::North || e.entrySide == School::Side::South) ? w : d;
+        const float D = (e.entrySide == School::Side::North || e.entrySide == School::Side::South) ? d : w;
+        const auto box = [&](const Vector3& min, const Vector3& max, const Vector3& colour, const char* tex) {
+            lit.setTextureProperty(s_.textures->Get(tex));
+            lit.setDiffuseColorProperty(colour);
+            lit.setWorldProperty(Matrix::CreateTranslation(0.5f, 0.5f, 0.5f) * Matrix::CreateScale(max - min) * Matrix::CreateTranslation(min) * frame);
+            EffectBank::Apply(lit);
+            cube.Draw(ctx.device);
+            ++stats_.drawCalls;
+            stats_.trianglesDrawn += cube.TriangleCount();
+        };
+        const Vector3 metal(0.92f, 0.93f, 0.96f);
+        const float hw = W * 0.5f - inner, hd = D * 0.5f - inner;
+        box(Vector3(-hw, 0.0f, -hd), Vector3(hw, 0.1f, hd), Vector3(0.45f, 0.45f, 0.5f), "floor_concrete");      // floor
+        box(Vector3(-hw, 2.35f, -hd), Vector3(hw, 2.45f, hd), metal, "white");                                      // ceiling
+        box(Vector3(-0.4f, 2.33f, -0.4f), Vector3(0.4f, 2.35f, 0.4f), Vector3(1.0f, 1.0f, 0.95f), "white");          // lamp
+        box(Vector3(-hw, 0.1f, hd - 0.04f), Vector3(hw, 2.35f, hd), metal, "wall_panel");                           // back wall
+        box(Vector3(-hw, 0.1f, -hd), Vector3(-hw + 0.04f, 2.35f, hd), metal, "wall_panel");                         // side walls
+        box(Vector3(hw - 0.04f, 0.1f, -hd), Vector3(hw, 2.35f, hd), metal, "wall_panel");
+        box(Vector3(-hw + 0.06f, 0.95f, hd - 0.1f), Vector3(hw - 0.06f, 1.0f, hd - 0.05f), Vector3(0.3f, 0.3f, 0.32f), "white");   // handrail
+        box(Vector3(hw - 0.35f, 1.1f, hd - 0.09f), Vector3(hw - 0.15f, 1.5f, hd - 0.04f), Vector3(0.2f, 0.22f, 0.25f), "white");  // button panel
+        (void)along;
+    }
 }

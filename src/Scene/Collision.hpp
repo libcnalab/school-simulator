@@ -36,6 +36,8 @@ public:
     static Microsoft::Xna::Framework::BoundingBox FixtureBounds(const School::Fixture& f, float baseY);
 
     [[nodiscard]] std::size_t CachedRooms() const { return cache_.size(); }
+    /** Boxes that change every frame (closed elevator doors); replaced wholesale. */
+    void SetDynamicBoxes(std::vector<Microsoft::Xna::Framework::BoundingBox> boxes) { dynamic_ = std::move(boxes); }
 
 private:
     void Build(School::RoomId room, std::vector<Microsoft::Xna::Framework::BoundingBox>& out) const;
@@ -45,5 +47,6 @@ private:
     const School::LayoutCache& layouts_;
     mutable std::unordered_map<int, std::vector<Microsoft::Xna::Framework::BoundingBox>> cache_;
     mutable std::vector<Microsoft::Xna::Framework::BoundingBox> stairSolids_;
+    std::vector<Microsoft::Xna::Framework::BoundingBox> dynamic_;
     mutable bool stairsBuilt_ = false;
 };

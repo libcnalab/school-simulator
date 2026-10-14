@@ -49,6 +49,22 @@ both ways of walking end in the same rooms.
 Doors: `DoorRuntime` per door with an open fraction, a "wanted open until" time (walkers, the player) and a
 next-free time per direction; `UpdateDoors` animates and emits open/close sounds.
 
+## Elevators
+
+Two shafts (`SchoolPlan::elevators`, east and west wings, levels 1-4) with a cab room per level and an
+elevator door to the corridor. People who prefer the lift (`Npc::usesElevator`) route through a second graph
+built with ride edges (`NavGraph(plan, true)`, 8 m-equivalent per level plus 10 for boarding, against about
+30 for a flight of stairs); everybody else, and everybody during a fire drill, uses the stairs graph. A ride is
+a run of `Ride` waypoints, one per level, in the journey.
+
+The cab (`ElevatorRuntime`): idle, opening, open (3.5 s dwell, extended while people board), closing, moving
+at 1.4 m/s; calls per level served in the current direction first (a plain SCAN); capacity 8. At full fidelity a
+walker calls the cab at the hall door's approach point, boards when it is open at that level and there is room
+(`passengers`), presses its destination (the level of the last ride point), is carried at the cab's height in
+the cab room of whatever level the cab is passing, and walks out when the doors open at its level. Abstract
+walkers take a timed ride (12 s plus 6 s per level) and are not drawn while inside a shaft. The player calls
+the cab with the button beside the door and chooses up or down on the panel inside.
+
 ## Fire drill
 
 `StartDrill` sends everybody on campus to the nearest assembly point (load-balanced, per class), with the

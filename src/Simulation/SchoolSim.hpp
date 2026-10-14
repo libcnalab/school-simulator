@@ -79,6 +79,19 @@ struct Agent {
     bool animPhaseSeed = false;
     float walkPhase = 0.0f;     // for the walk cycle
     DoorId doorHeld = kNone;
+    int riding = kNone;         // elevator shaft the walker is inside (full fidelity)
+    int rideTo = -1;            // level asked for while riding
+};
+
+/** What an elevator is doing, for rendering and the player's own ride. */
+struct ElevatorStatus {
+    int shaft = kNone;
+    float y = 0.0f;             // height of the cab floor
+    int level = 1;              // level the cab is at or last left
+    int target = -1;            // level it is going to (-1: none)
+    float doorOpen = 0.0f;      // 0 closed .. 1 open (at `level`)
+    bool moving = false;
+    int passengers = 0;
 };
 
 struct DoorRuntime {
@@ -113,6 +126,7 @@ struct SimStats {
     long long events = 0;
     long long unstuck = 0;
     long long doorPasses = 0;
+    long long elevatorRides = 0;
     int bellsRung = 0;
     int unreachable = 0;            // goals that no route led to (should stay 0)
     double lateArrivals = 0;        // students arriving after their lesson began (count)
@@ -137,7 +151,8 @@ struct BellEvent {
 
 class SchoolSim {
 public:
-    SchoolSim(const SchoolPlan& plan, const NavGraph& nav, const LayoutCache& layouts, BellSchedule schedule, const SimSettings& settings);
+    /** `liftNav` (a graph built with elevators) is used by the people who prefer the elevator; null means nobody rides. */
+    SchoolSim(const SchoolPlan& plan, const NavGraph& nav, const LayoutCache& layouts, BellSchedule schedule, const SimSettings& settings, const NavGraph* liftNav = nullptr);
 
     // --- what exists -------------------------------------------------------------------------------------
     [[nodiscard]] const Population& Pop() const { return pop_; }
@@ -194,6 +209,12 @@ public:
     // --- doors ---------------------------------------------------------------------------------------------------
     /** Somebody (the player) wants this door open for `seconds`. */
     void RequestDoor(DoorId door, float seconds = 3.0f);
+
+    // --- elevators -------------------------------------------------------------------------------------------------
+    [[nodiscard]] int ElevatorCount() const { return static_cast<int>(elevators_.size()); }
+    [[nodiscard]] ElevatorStatus Elevator(int shaft) const;
+    /** A hall call or a cab button: the cab will stop at `level`. */
+    void CallElevator(int shaft, int level);
 
     // --- fire drill ------------------------------------------------------------------------------------------------
     void StartDrill();
@@ -252,6 +273,7 @@ private:
     void Demote(int npc, Fidelity to);
     void SetSpot(int npc, const Goal& g);
     void UpdateDoors(float dt);
+    void UpdateElevators(float dt);
     void LeaveSpot(int npc);
     float Occupancy(RoomId r) const { return static_cast<float>(occupancy_[static_cast<std::size_t>(r)]); }
 
@@ -266,6 +288,21 @@ private:
     BellSchedule schedule_;
     SimSettings settings_;
     PathBuilder paths_;
+    std::unique_ptr<PathBuilder> liftPaths_;
+    struct ElevatorRuntime {
+        enum class State : std::uint8_t { Idle, Opening, Open, Closing, Moving };
+        float y = 0.0f;
+        int level = 1;
+        int target = -1;
+        State state = State::Idle;
+        float door = 0.0f;
+        float timer = 0.0f;
+        int direction = 1;
+        int passengers = 0;
+        std::vector<char> calls;       // per level index
+        std::vector<DoorId> doorIds;   // the cab door per level index
+    };
+    std::vector<ElevatorRuntime> elevators_;
     Population pop_;
     std::vector<Agent> agents_;
     std::vector<DoorRuntime> doors_;

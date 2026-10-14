@@ -73,6 +73,7 @@ private:
     // the school as data (no CNA)
     School::SchoolPlan plan_;
     std::unique_ptr<School::NavGraph> nav_;
+    std::unique_ptr<School::NavGraph> liftNav_;
     std::unique_ptr<School::LayoutCache> layouts_;
     std::unique_ptr<School::SchoolSim> sim_;
 
@@ -136,4 +137,7 @@ private:
     bool screenshotDone_ = false;
     std::set<std::string> drawErrorsSeen_;
     NpcDrawStats npcStats_;
+    std::vector<School::ElevatorStatus> elevators_;
+    int ridingShaft_ = -1;
+    void UpdateElevators();
 };

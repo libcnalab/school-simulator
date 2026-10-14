@@ -58,6 +58,11 @@ const NavGraph& Nav()
     static const NavGraph nav(Plan());
     return nav;
 }
+const NavGraph& LiftNav()
+{
+    static const NavGraph nav(Plan(), true);
+    return nav;
+}
 const LayoutCache& Layouts()
 {
     static const LayoutCache layouts(Plan());
@@ -490,7 +495,7 @@ struct Rig {
         settings.reducedRadius = radius * 2.0f;
         settings.seed = seed;
         settings.enableFull = full;
-        sim = std::make_unique<SchoolSim>(Plan(), Nav(), Layouts(), BellSchedule::Default(), settings);
+        sim = std::make_unique<SchoolSim>(Plan(), Nav(), Layouts(), BellSchedule::Default(), settings, &LiftNav());
     }
 };
 
@@ -684,6 +689,77 @@ void TestFireDrill()
     CHECK(sim.CheckInvariants().empty());
 }
 
+void TestElevators()
+{
+    const SchoolPlan& plan = Plan();
+    CHECK_MSG(plan.elevators.size() >= 2, "only %zu elevators", plan.elevators.size());
+    for (const ElevatorShaft& e : plan.elevators) {
+        CHECK(e.levelHigh - e.levelLow >= 2);
+        for (const RoomId cab : e.cab) CHECK(cab != kNone && plan.room(cab).type == RoomType::ElevatorCab);
+    }
+    // The plain graph never rides; the lift graph rides between distant levels of the same wing.
+    const NavGraph& walk = Nav();
+    const NavGraph& lift = LiftNav();
+    for (const NavEdge& e : walk.Edges()) CHECK(e.elevator == kNone);
+    const ElevatorShaft& e0 = plan.elevators.front();
+    const RoomId low = e0.cab.front(), high = e0.cab.back();
+    CHECK(walk.Reachable(low, high));
+    CHECK(lift.Distance(low, high) < walk.Distance(low, high));
+    // A route from a classroom next to the shaft's bottom to one next to its top uses the elevator.
+    RoomId from = kNone, to = kNone;
+    for (const Room& r : plan.rooms) {
+        if (!Info(r.type).teaching || r.wing != plan.room(low).wing) continue;
+        if (r.level == plan.room(low).level && Distance(r.rect.Center(), plan.room(low).rect.Center()) < 25.0f && from == kNone) from = r.id;
+        if (r.level == plan.room(high).level && Distance(r.rect.Center(), plan.room(high).rect.Center()) < 25.0f && to == kNone) to = r.id;
+    }
+    CHECK(from != kNone && to != kNone);
+    std::vector<int> route;
+    CHECK(lift.Route(from, to, route));
+    int rides = 0;
+    for (const int e : route) rides += lift.Edge(e).elevator != kNone ? 1 : 0;
+    CHECK_MSG(rides >= 2, "the route rides %d levels: %s -> %s, lift %.1f walk %.1f, cab-to-cab lift %.1f walk %.1f", rides, plan.room(from).name.c_str(), plan.room(to).name.c_str(),
+              static_cast<double>(lift.Distance(from, to)), static_cast<double>(walk.Distance(from, to)), static_cast<double>(lift.Distance(low, high)), static_cast<double>(walk.Distance(low, high)));
+    PathBuilder pb(lift);
+    std::vector<Waypoint> pts;
+    CHECK(pb.Build(from, plan.room(from).rect.Center(), to, plan.room(to).rect.Center(), pts));
+    int ridePoints = 0;
+    for (const Waypoint& w : pts) ridePoints += w.kind == WaypointKind::Ride ? 1 : 0;
+    CHECK_MSG(ridePoints >= 3, "%d ride points", ridePoints);
+
+    // Full fidelity around the shaft through a change of rooms: people ride and nobody is left waiting forever.
+    Rig rig(400, true, 3, 500.0f);
+    SchoolSim& sim = *rig.sim;
+    sim.FastForwardTo(Hours(8, 40));
+    sim.SetFocus({Focus{plan.room(low).rect.Center(), plan.room(low).level, 60.0f}});
+    int maxPassengers = 0;
+    bool moved = false;
+    while (sim.Time() < Hours(9, 10)) {
+        sim.Advance(0.1);
+        for (int i = 0; i < sim.ElevatorCount(); ++i) {
+            const ElevatorStatus st = sim.Elevator(i);
+            maxPassengers = std::max(maxPassengers, st.passengers);
+            moved |= st.moving;
+            CHECK(st.passengers >= 0 && st.passengers <= 12);
+        }
+    }
+    CHECK(sim.CheckInvariants().empty());
+    CHECK_MSG(moved, "no cab ever moved");
+    CHECK_MSG(sim.Stats().elevatorRides > 0, "nobody rode");
+    CHECK(sim.Stats().unreachable == 0);
+    CHECK_MSG(maxPassengers > 0, "no passenger counted");
+    // Everyone ends up in their lesson-2 room, including the riders.
+    int wrong = 0;
+    for (const Npc& n : sim.Pop().npcs) {
+        if (n.role != Role::Student) continue;
+        const ClassGroup& g = sim.Pop().classes[static_cast<std::size_t>(n.classId)];
+        const Lesson& l = g.timetable[static_cast<std::size_t>(sim.Weekday())][1];
+        const RoomId want = l.free ? g.home : l.room;
+        const Agent& a = sim.AgentOf(n.id);
+        if (a.mode != Mode::AtSpot || a.room != want) ++wrong;
+    }
+    CHECK_MSG(wrong == 0, "%d students are not in their lesson-2 room", wrong);
+}
+
 void TestSoak()
 {
     Rig rig(200);
@@ -721,6 +797,7 @@ int main()
         {"routes consistent", TestRoutesAreConsistent},
         {"unreachable destination", TestUnreachableDestination},
         {"multi-floor route", TestMultiFloorRoute},
+        {"elevators", TestElevators},
         {"waypoints stay inside rooms", TestWaypointsStayInsideRooms},
         {"default schedule valid", TestDefaultScheduleValid},
         {"schedule parsing", TestScheduleParsing},

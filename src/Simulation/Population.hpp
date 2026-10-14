@@ -59,6 +59,7 @@ struct Npc {
     int baseSpot = 0;           // staff: which work spot of that room
     int zone = 0;               // janitors, guards: index of the patrol zone
     float speed = 1.3f;         // walking speed in m/s
+    bool usesElevator = false;  // prefers the elevator to the stairs when it is the cheaper route
 };
 
 enum class Preset { Empty, Light, Normal, Busy, Extreme };

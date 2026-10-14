@@ -33,6 +33,14 @@ public:
     [[nodiscard]] const Microsoft::Xna::Framework::Vector3& Feet() const { return feet_; }
     [[nodiscard]] int Level() const { return level_; }
 
+    /** Carried by an elevator cab: the feet follow `y` instead of the plan's ground. */
+    void SetRide(bool riding, float y)
+    {
+        riding_ = riding;
+        rideY_ = y;
+    }
+    [[nodiscard]] bool Riding() const { return riding_; }
+
     /** Walk and look for one frame. `mouseLook` is false while the pointer is released (menus). */
     void Update(float dt, FirstPersonCamera& camera, const CollisionWorld& collision, const InputState& input, bool mouseLook);
 
@@ -60,6 +68,8 @@ private:
     Microsoft::Xna::Framework::Vector3 feet_{0, 0, 0};
     float groundY_ = 0.0f;
     int level_ = 1;
+    bool riding_ = false;
+    float rideY_ = 0.0f;
     bool captured_ = false;
     bool relativeMode_ = false;
     bool pointerUnavailable_ = false;   // the platform cannot re-centre the pointer (no window): mouse look off

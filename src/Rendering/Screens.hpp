@@ -78,6 +78,15 @@ private:
     };
     std::vector<Sign> signs_;
     std::unique_ptr<Microsoft::Xna::Framework::Graphics::RenderTarget2D> signage_;
+    std::unique_ptr<Microsoft::Xna::Framework::Graphics::RenderTarget2D> diagnostics_;
+    float diagnosticsAge_ = 10.0f;
+    bool diagnosticsNear_ = false;
+    struct Monitor {
+        Microsoft::Xna::Framework::Vector3 centre;
+        float yaw = 0.0f;
+    };
+    std::vector<Monitor> monitors_;           // the diagnostics monitors (server rooms, security offices)
+    void RenderDiagnostics(Microsoft::Xna::Framework::Graphics::GraphicsDevice& device);
     float signageAge_ = 10.0f;
     bool signageNear_ = false;
     std::map<int, std::unique_ptr<Microsoft::Xna::Framework::Graphics::RenderTarget2D>> boards_;

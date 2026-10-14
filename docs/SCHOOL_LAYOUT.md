@@ -18,7 +18,8 @@ wing, first floor, room 5; `SB.03` = south wing basement); outdoor zones are `O.
         south strip SO (z 115..124)   stairs at x 38 and 118
 ```
 
-Corner towers hold a staircase at every level; mid-wing stairwells sit in the outer strips. The ring exists on
+Corner towers hold a staircase at every level; mid-wing stairwells sit in the outer strips, each with an
+elevator shaft beside it in the east and west wings (a 2.6 x 2.6 cab at the corridor, a closet behind it). The ring exists on
 levels 1..5 (north) and 0..4 (south); the east and west corridors on 1..4. Every strip is written in
 `Blueprint.cpp` as cores (stairs, toilets, passages: the same on every level) and programs for the gaps:
 `"CL*"` fills with classrooms, `"PH PP CH PP"` is physics lab, prep room, chemistry lab, prep room.
@@ -51,5 +52,5 @@ on a wall both rooms share.
 
 ## Numbers (from `school-sim-cli --stats`)
 
-748 rooms (721 indoor, 27 outdoor zones), 157 corridor segments, 855 doors, 10 staircases, 67 000 m2 of
-indoor floor.
+764 rooms (737 indoor, 27 outdoor zones), 157 corridor segments, 863 doors, 10 staircases, 2 elevators,
+67 000 m2 of indoor floor.

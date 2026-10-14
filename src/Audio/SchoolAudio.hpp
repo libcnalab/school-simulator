@@ -45,5 +45,6 @@ private:
     float chatterLevel_ = 0.0f;
     std::string weatherName_ = "clear";
     bool outdoors_ = false;
+    Microsoft::Xna::Framework::Vector3 listener_;
     int stepIndex_ = 0;
 };

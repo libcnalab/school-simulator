@@ -10,10 +10,12 @@
 namespace School {
 
 namespace {
-constexpr float kStairPenalty = 1.5f;   // stairs are slower than level ground: cost per metre of climb
+constexpr float kStairPenalty = 1.5f;      // stairs are slower than level ground: cost per metre of climb
+constexpr float kElevatorEntry = 10.0f;    // metres-equivalent of calling and boarding
+constexpr float kElevatorPerLevel = 8.0f;  // against about 30 for a flight of stairs: those who prefer the lift take it even for one level
 }
 
-NavGraph::NavGraph(const SchoolPlan& plan) : plan_(plan)
+NavGraph::NavGraph(const SchoolPlan& plan, bool elevators) : plan_(plan), elevators_(elevators)
 {
     adjacency_.resize(plan.rooms.size());
     trees_.resize(plan.rooms.size());
@@ -57,6 +59,27 @@ NavGraph::NavGraph(const SchoolPlan& plan) : plan_(plan)
             down.to = lower;
             down.upward = false;
             addPair(up, down);
+        }
+    }
+    if (elevators) {
+        for (const ElevatorShaft& e : plan.elevators) {
+            for (std::size_t i = 0; i + 1 < e.cab.size(); ++i) {
+                const RoomId lower = e.cab[i];
+                const RoomId upper = e.cab[i + 1];
+                if (lower == kNone || upper == kNone) continue;
+                NavEdge up;
+                up.from = lower;
+                up.to = upper;
+                up.elevator = e.id;
+                up.upward = true;
+                // Entry is paid once per ride: half here and half on the way out keeps a one-level ride at entry + per-level.
+                up.cost = kElevatorPerLevel + kElevatorEntry * 0.5f;
+                NavEdge down = up;
+                down.from = upper;
+                down.to = lower;
+                down.upward = false;
+                addPair(up, down);
+            }
         }
     }
 }
@@ -194,6 +217,18 @@ void PathBuilder::AddStairs(const NavEdge& edge, Vec2, std::vector<Waypoint>& ou
     }
 }
 
+void PathBuilder::AddRide(const NavEdge& edge, std::vector<Waypoint>& out) const
+{
+    const SchoolPlan& plan = graph_.Plan();
+    const Room& to = plan.room(edge.to);
+    // The first ride point (in the cab we entered) is added by the door exit; every further level adds one.
+    if (out.empty() || out.back().kind != WaypointKind::Ride) {
+        const Room& from = plan.room(edge.from);
+        out.push_back({Vec3(from.rect.Center(), BaseY(from.id)), from.id, kNone, WaypointKind::Ride});
+    }
+    out.push_back({Vec3(to.rect.Center(), BaseY(to.id)), to.id, kNone, WaypointKind::Ride});
+}
+
 bool PathBuilder::Build(RoomId startRoom, Vec2 startPos, RoomId endRoom, Vec2 endPos, std::vector<Waypoint>& out, float laneOffset) const
 {
     const SchoolPlan& plan = graph_.Plan();
@@ -204,6 +239,12 @@ bool PathBuilder::Build(RoomId startRoom, Vec2 startPos, RoomId endRoom, Vec2 en
     for (std::size_t i = 0; i < route.size(); ++i) {
         const NavEdge& e = graph_.Edge(route[i]);
         const Room& current = plan.room(room);
+        if (e.elevator != kNone) {
+            AddRide(e, out);
+            room = e.to;
+            here = plan.room(room).rect.Center();
+            continue;
+        }
         if (e.stair != kNone) {
             // Walk to the middle of the entry landing, then climb.
             const Vec3 landing = Vec3(current.rect.Center(), BaseY(room));

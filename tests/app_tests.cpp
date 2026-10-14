@@ -57,7 +57,8 @@ int main()
                               "%s/%s spills out of its room: x %.1f..%.1f z %.1f..%.1f vs %.1f..%.1f %.1f..%.1f", r.name.c_str(), texture.c_str(), static_cast<double>(bb.Min.X),
                               static_cast<double>(bb.Max.X), static_cast<double>(bb.Min.Z), static_cast<double>(bb.Max.Z), static_cast<double>(r.rect.x0), static_cast<double>(r.rect.x1),
                               static_cast<double>(r.rect.z0), static_cast<double>(r.rect.z1));
-                    CHECK_MSG(bb.Min.Y >= y0 - 1.0f && bb.Max.Y <= y0 + static_cast<float>(r.levels) * kFloorHeight + 12.0f, "%s/%s has a strange height", r.name.c_str(), texture.c_str());
+                    const float below = r.type == RoomType::ElevatorCab ? 1.5f : 1.0f;   // a shaft has a pit
+                    CHECK_MSG(bb.Min.Y >= y0 - below && bb.Max.Y <= y0 + static_cast<float>(r.levels) * kFloorHeight + 12.0f, "%s/%s has a strange height", r.name.c_str(), texture.c_str());
                     for (const std::uint16_t i : b.Indices()) CHECK_MSG(i < b.VertexCount(), "%s/%s index out of range", r.name.c_str(), texture.c_str());
                 }
         CHECK_MSG(!g.meshes.Empty(), "%s has no geometry", r.name.c_str());

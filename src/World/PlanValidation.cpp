@@ -153,6 +153,29 @@ std::vector<std::string> ValidatePlan(const SchoolPlan& plan)
         }
     }
 
+    // --- elevators -------------------------------------------------------------------------------------------------------
+    for (const ElevatorShaft& e : plan.elevators) {
+        if (e.levelHigh <= e.levelLow) fail(Fmt("elevator %d serves a single level", e.id));
+        if (static_cast<int>(e.cab.size()) != e.levelHigh - e.levelLow + 1) fail(Fmt("elevator %d has a wrong cab count", e.id));
+        for (std::size_t i = 0; i < e.cab.size(); ++i) {
+            const RoomId id = e.cab[i];
+            if (id == kNone) {
+                fail(Fmt("elevator %d has no cab room on level %d", e.id, e.levelLow + static_cast<int>(i)));
+                continue;
+            }
+            const Room& r = plan.room(id);
+            if (r.type != RoomType::ElevatorCab || r.elevatorId != e.id || r.level != e.levelLow + static_cast<int>(i)) fail(Fmt("elevator %d cab %zu is inconsistent", e.id, i));
+            if (!r.rect.Overlaps(e.footprint.Inflated(0.01f))) fail(Fmt("elevator %d cab %zu is not in the shaft", e.id, i));
+            int doors = 0;
+            for (const DoorId d : r.doors) {
+                const Door& door = plan.door(d);
+                if (door.kind != DoorKind::ElevatorDoor) fail(Fmt("cab %s has a door that is not an elevator door", r.name.c_str()));
+                if (door.a == id && door.sideOfA == e.entrySide) ++doors;
+            }
+            if (doors != 1) fail(Fmt("cab %s has %d doors on its entry side", r.name.c_str(), doors));
+        }
+    }
+
     // --- campus ---------------------------------------------------------------------------------------------------------------
     if (plan.offsite == kNone) fail("the plan has no off-campus street");
     if (plan.mainLobby == kNone) fail("the plan has no main lobby");

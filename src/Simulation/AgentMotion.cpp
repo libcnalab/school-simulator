@@ -131,7 +131,8 @@ bool SchoolSim::BuildJourney(int npc, RoomId startRoom, Vec3 startPos, const Goa
     }
     std::vector<Waypoint> pts;
     pts.push_back({startPos, startRoom, kNone, WaypointKind::Walk});
-    if (!paths_.Build(startRoom, startPos.XZ(), endRoom, endPos, pts)) {
+    const PathBuilder& builder = (liftPaths_ && n.usesElevator && !drill_.active) ? *liftPaths_ : paths_;
+    if (!builder.Build(startRoom, startPos.XZ(), endRoom, endPos, pts)) {
         ++stats_.unreachable;
         // Fall back so nobody is lost: they appear at their destination.
         a.goal = g;
@@ -165,12 +166,20 @@ bool SchoolSim::BuildJourney(int npc, RoomId startRoom, Vec3 startPos, const Goa
     auto journey = std::make_unique<Journey>();
     journey->pts = std::move(pts);
     journey->cum.assign(journey->pts.size(), 0.0f);
+    const float speed = n.speed * (g.activity == Activity::Evacuating || drill_.active ? 1.35f : 1.0f);
     for (std::size_t i = 1; i < journey->pts.size(); ++i) {
         const Vec3 d = journey->pts[i].pos - journey->pts[i - 1].pos;
-        journey->cum[i] = journey->cum[i - 1] + std::sqrt(d.x * d.x + d.z * d.z) + std::fabs(d.y) * 0.3f;   // stairs are slower: climbing counts extra
+        const bool ride = journey->pts[i].kind == WaypointKind::Ride && journey->pts[i - 1].kind == WaypointKind::Ride;
+        if (ride) {
+            // A level by elevator takes a wait plus the travel, counted in metres at this walker's speed.
+            const float levels = std::fabs(d.y) / kFloorHeight;
+            journey->cum[i] = journey->cum[i - 1] + (12.0f + 6.0f * levels) * speed;
+        } else {
+            journey->cum[i] = journey->cum[i - 1] + std::sqrt(d.x * d.x + d.z * d.z) + std::fabs(d.y) * 0.3f;   // stairs are slower: climbing counts extra
+        }
     }
     journey->start = startTime;
-    journey->speed = n.speed * (g.activity == Activity::Evacuating || drill_.active ? 1.35f : 1.0f);
+    journey->speed = speed;
     const double end = journey->start + static_cast<double>(journey->Total() / journey->speed);
     a.journey = std::move(journey);
     a.mode = Mode::Transit;
@@ -183,6 +192,12 @@ bool SchoolSim::BuildJourney(int npc, RoomId startRoom, Vec3 startPos, const Goa
     a.waitTimer = a.stuckTimer = 0.0f;
     a.stuckRef = startPos.XZ();
     a.pos = startPos;
+    if (a.riding != kNone) {
+        ElevatorRuntime& r = elevators_[static_cast<std::size_t>(a.riding)];
+        r.passengers = std::max(0, r.passengers - 1);
+        a.riding = kNone;
+    }
+    a.rideTo = -1;
     ++a.epoch;
     events_.push({end, npc, a.epoch, Event::Arrive});
     return true;
@@ -205,6 +220,10 @@ void SchoolSim::Arrive(int npc)
     }
     const Goal g = a.goal;
     a.journey.reset();
+    if (a.riding != kNone) {
+        elevators_[static_cast<std::size_t>(a.riding)].passengers = std::max(0, elevators_[static_cast<std::size_t>(a.riding)].passengers - 1);
+        a.riding = kNone;
+    }
     ++a.epoch;
     if (g.room == plan_.offsite || g.room == kNone) {
         a.mode = Mode::Offsite;
@@ -342,6 +361,10 @@ void SchoolSim::Demote(int npc, Fidelity to)
         return;
     }
     if (a.fidelity == Fidelity::Full) {
+        if (a.riding != kNone) {
+            elevators_[static_cast<std::size_t>(a.riding)].passengers = std::max(0, elevators_[static_cast<std::size_t>(a.riding)].passengers - 1);
+            a.riding = kNone;
+        }
         // Continue analytically from where the walker is: shift the start so the arithmetic agrees.
         Journey& j = *a.journey;
         const std::size_t prev = static_cast<std::size_t>(std::max(0, a.leg - 1));
@@ -429,6 +452,7 @@ void SchoolSim::UpdateDoors(float dt)
             d.open = 1.0f;
             continue;
         }
+        if (def.kind == DoorKind::ElevatorDoor) continue;   // driven by the elevator
         const float before = d.open;
         const float target = time_ < d.wantOpenUntil ? 1.0f : 0.0f;
         const float rate = def.kind == DoorKind::Automatic ? 2.5f : 2.0f;
@@ -437,6 +461,91 @@ void SchoolSim::UpdateDoors(float dt)
         if (before < 0.02f && d.open >= 0.02f) doorSounds_.push_back({def.id, true});
         if (before > 0.01f && d.open <= 0.01f) doorSounds_.push_back({def.id, false});
         d.busy = std::max(0.0f, d.busy - dt);
+    }
+}
+
+// --- elevators ---------------------------------------------------------------------------------------------------------------------------
+
+void SchoolSim::UpdateElevators(float dt)
+{
+    using State = ElevatorRuntime::State;
+    constexpr float kSpeed = 1.4f;        // m/s
+    constexpr float kDoorTime = 0.9f;     // seconds to open or close
+    constexpr float kDwell = 3.5f;
+    for (std::size_t i = 0; i < elevators_.size(); ++i) {
+        ElevatorRuntime& r = elevators_[i];
+        const ElevatorShaft& e = plan_.elevators[i];
+        const int levels = static_cast<int>(e.cab.size());
+        const int here = r.level - e.levelLow;
+        const auto anyCall = [&](int from, int step) {
+            for (int k = from; k >= 0 && k < levels; k += step)
+                if (r.calls[static_cast<std::size_t>(k)]) return k;
+            return -1;
+        };
+        switch (r.state) {
+        case State::Idle: {
+            if (r.calls[static_cast<std::size_t>(here)]) {
+                r.state = State::Opening;
+                if (r.doorIds[static_cast<std::size_t>(here)] != kNone) doorSounds_.push_back({r.doorIds[static_cast<std::size_t>(here)], true});
+                break;
+            }
+            int next = anyCall(here + r.direction, r.direction);
+            if (next < 0) {
+                r.direction = -r.direction;
+                next = anyCall(here + r.direction, r.direction);
+            }
+            if (next >= 0) {
+                r.target = e.levelLow + next;
+                r.state = State::Moving;
+            }
+            break;
+        }
+        case State::Opening:
+            r.door = std::min(1.0f, r.door + dt / kDoorTime);
+            if (r.door >= 1.0f) {
+                r.state = State::Open;
+                r.timer = kDwell;
+                r.calls[static_cast<std::size_t>(here)] = 0;
+            }
+            break;
+        case State::Open:
+            r.calls[static_cast<std::size_t>(here)] = 0;
+            r.timer -= dt;
+            if (r.timer <= 0.0f) r.state = State::Closing;
+            break;
+        case State::Closing:
+            r.door = std::max(0.0f, r.door - dt / kDoorTime);
+            if (r.door <= 0.0f) {
+                r.state = State::Idle;
+                if (r.doorIds[static_cast<std::size_t>(here)] != kNone) doorSounds_.push_back({r.doorIds[static_cast<std::size_t>(here)], false});
+            }
+            break;
+        case State::Moving: {
+            const float targetY = plan_.FloorY(r.target);
+            const float step = kSpeed * dt;
+            if (std::fabs(targetY - r.y) <= step) {
+                r.y = targetY;
+                r.level = r.target;
+                r.target = -1;
+                r.state = State::Opening;
+                const int idx = r.level - e.levelLow;
+                if (r.doorIds[static_cast<std::size_t>(idx)] != kNone) doorSounds_.push_back({r.doorIds[static_cast<std::size_t>(idx)], true});
+            } else {
+                r.y += targetY > r.y ? step : -step;
+                // the level the cab is nearest to, for anyone reading it mid-ride
+                r.level = plan_.LevelAt(r.y + 0.6f);
+                r.level = std::clamp(r.level, e.levelLow, e.levelHigh);
+                if (r.target < 0) r.state = State::Idle;
+            }
+            break;
+        }
+        }
+        // The cab doors on the plan follow the cab.
+        for (int k = 0; k < levels; ++k) {
+            const DoorId d = r.doorIds[static_cast<std::size_t>(k)];
+            if (d == kNone) continue;
+            doors_[static_cast<std::size_t>(d)].open = (k == r.level - e.levelLow && r.state != State::Moving) ? r.door : 0.0f;
+        }
     }
 }
 
@@ -500,7 +609,77 @@ void SchoolSim::StepFull(int npc, float dt)
     const bool onStairs = wp.kind == WaypointKind::StairStep || (a.leg > 0 && j.pts[static_cast<std::size_t>(a.leg - 1)].kind == WaypointKind::StairStep);
     if (onStairs) speed *= 0.8f;
 
+    // --- elevator ride: wait inside the cab until it has carried us to the level of the last ride point
+    if (wp.kind == WaypointKind::Ride) {
+        const Room& cabRoom = plan_.room(wp.room);
+        const int shaft = cabRoom.elevatorId;
+        if (shaft != kNone && a.leg > 0 && j.pts[static_cast<std::size_t>(a.leg - 1)].kind == WaypointKind::Ride) {
+            // We are in the cab and this point is on another level.
+            ElevatorRuntime& r = elevators_[static_cast<std::size_t>(shaft)];
+            const ElevatorShaft& e = plan_.elevators[static_cast<std::size_t>(shaft)];
+            std::size_t last = static_cast<std::size_t>(a.leg);
+            while (last + 1 < count && j.pts[last + 1].kind == WaypointKind::Ride) ++last;
+            const int destLevel = plan_.room(j.pts[last].room).level;
+            if (a.riding == kNone) {
+                a.riding = shaft;
+                ++r.passengers;
+            }
+            if (a.rideTo != destLevel) {
+                a.rideTo = destLevel;
+                CallElevator(shaft, destLevel);
+            }
+            // Carried by the cab: stand still at its height, in the cab room of the level it is at.
+            a.vel = Vec2{};
+            a.pos.y = r.y;
+            const RoomId cabHere = e.cab[static_cast<std::size_t>(std::clamp(r.level - e.levelLow, 0, static_cast<int>(e.cab.size()) - 1))];
+            if (cabHere != kNone) a.room = cabHere;
+            a.stuckTimer = 0.0f;
+            if (r.level == destLevel && r.state == ElevatorRuntime::State::Open) {
+                a.leg = static_cast<int>(last) + 1;
+                a.pos = j.pts[last].pos;
+                a.room = j.pts[last].room;
+                a.rideTo = -1;
+                if (a.leg >= static_cast<int>(count)) Arrive(npc);
+            }
+            return;
+        }
+        // The first ride point (the cab we just entered): walk to it like any other point.
+    }
+
     // --- door gate: wait at the approach point until the door is open and it is our turn
+    if (wp.kind == WaypointKind::DoorApproach && dist < 0.45f && plan_.door(wp.door).kind == DoorKind::ElevatorDoor) {
+        const DoorId did = wp.door;
+        const Door& def = plan_.door(did);
+        const RoomId cab = plan_.room(def.a).type == RoomType::ElevatorCab ? def.a : def.b;
+        const int shaft = plan_.room(cab).elevatorId;
+        ElevatorRuntime& r = elevators_[static_cast<std::size_t>(shaft)];
+        const int level = plan_.room(cab).level;
+        const bool inside = wp.room == cab;
+        if (!inside) CallElevator(shaft, level);
+        const bool here = r.level == level && r.state == ElevatorRuntime::State::Open;
+        const bool ready = here && (inside || r.passengers < 8);
+        if (!ready && a.waitTimer < 60.0f) {
+            a.waitTimer += dt;
+            a.vel = a.vel * 0.5f;
+            a.stuckTimer = 0.0f;
+            return;
+        }
+        if (inside) {
+            if (a.riding != kNone) {
+                r.passengers = std::max(0, r.passengers - 1);
+                a.riding = kNone;
+            }
+            ++stats_.elevatorRides;
+        } else {
+            a.riding = shaft;
+            ++r.passengers;
+        }
+        r.timer = std::max(r.timer, 2.0f);   // hold the doors for the person in them
+        ++stats_.doorPasses;
+        a.waitTimer = 0.0f;
+        ++a.leg;
+        return;
+    }
     if (wp.kind == WaypointKind::DoorApproach && dist < 0.45f) {
         const DoorId did = wp.door;
         const Door& def = plan_.door(did);
@@ -523,7 +702,7 @@ void SchoolSim::StepFull(int npc, float dt)
         ++a.leg;
         return;
     }
-    if (wp.kind == WaypointKind::Doorway) RequestDoor(wp.door, 1.2f);
+    if (wp.kind == WaypointKind::Doorway && plan_.door(wp.door).kind != DoorKind::ElevatorDoor) RequestDoor(wp.door, 1.2f);
 
     // --- steer
     Vec2 desired{};

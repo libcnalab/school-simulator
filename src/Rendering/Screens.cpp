@@ -85,6 +85,59 @@ Screens::Screens(Services& services, const School::SchoolPlan& plan, const Schoo
     for (const Room& r : plan.rooms)
         if (r.type == RoomType::Cafeteria) signs_.push_back({Vector3(r.rect.Center().x + 8.0f, 3.2f, r.rect.z0 + 0.03f), MathHelper::Pi, 2.6f, 1.3f});
     signage_ = std::make_unique<RenderTarget2D>(*s_.device, 512, 256, false, SurfaceFormat::Color, DepthFormat::None, 0, RenderTargetUsage::PreserveContents);
+    // Diagnostics monitors: the computer desk in every server room and security office shows the frame statistics.
+    for (const Room& r : plan.rooms) {
+        if (r.type != RoomType::ServerRoom && r.type != RoomType::SecurityOffice) continue;
+        for (const School::Fixture& f : layouts.Get(r.id).fixtures) {
+            if (f.type != School::FixtureType::ComputerDesk) continue;
+            // the monitor's screen: see AddFixture (ComputerDesk): centre (0, sy + 0.26, hz - 0.2 - 0.019) in the desk's frame
+            const Matrix frame = Matrix::CreateRotationY(f.yaw) * Matrix::CreateTranslation(f.pos.x, plan.FloorY(r.level) + f.y0, f.pos.z);
+            monitors_.push_back({Vector3::Transform(Vector3(0.0f, f.sy + 0.26f, f.sz * 0.5f - 0.2f - 0.019f), frame), f.yaw});
+        }
+    }
+    diagnostics_ = std::make_unique<RenderTarget2D>(*s_.device, 384, 256, false, SurfaceFormat::Color, DepthFormat::None, 0, RenderTargetUsage::PreserveContents);
+}
+
+void Screens::RenderDiagnostics(GraphicsDevice& device)
+{
+    if (s_.font == nullptr || s_.stats == nullptr) return;
+    device.SetRenderTarget(diagnostics_.get());
+    device.Clear(Color(6, 10, 16, 255));
+    const SamplerState sampler = SamplerState::LinearClamp;
+    s_.sprites->Begin(SpriteSortMode::Deferred, &BlendState::NonPremultiplied, &sampler, nullptr, nullptr);
+    const Color green(120, 255, 140, 255), dim(90, 160, 110, 255);
+    const FrameStats& st = *s_.stats;
+    char buf[128];
+    float y = 10.0f;
+    const auto line = [&](const char* text, const Color& c) {
+        s_.sprites->DrawString(*s_.font, text, Vector2(12, y), c, 0.0f, Vector2(0, 0), 0.62f, SpriteEffects::None, 0.0f);
+        y += 22.0f;
+    };
+    line("SCHOOL DIAGNOSTICS", dim);
+    std::snprintf(buf, sizeof buf, "%.0f fps  %.1f ms", static_cast<double>(st.fps), static_cast<double>(st.frameMilliseconds));
+    line(buf, green);
+    std::snprintf(buf, sizeof buf, "sim %.2f ms  people %d", static_cast<double>(st.simMilliseconds), st.npcTotal);
+    line(buf, green);
+    std::snprintf(buf, sizeof buf, "on campus %d  walking %d", st.npcOnCampus, st.npcWalking);
+    line(buf, green);
+    std::snprintf(buf, sizeof buf, "full %d  drawn %d", st.npcFull, st.npcDrawn);
+    line(buf, green);
+    std::snprintf(buf, sizeof buf, "rooms %d loaded  %d drawn", st.roomsLoaded, st.roomsDrawn);
+    line(buf, green);
+    std::snprintf(buf, sizeof buf, "tris %d  calls %d", st.trianglesDrawn, st.drawCalls);
+    line(buf, green);
+    std::snprintf(buf, sizeof buf, "voices %d  particles %d", st.activeVoices, st.particles);
+    line(buf, green);
+    std::snprintf(buf, sizeof buf, "textures %d  frame %lld", st.textures, st.frame);
+    line(buf, green);
+    // a little bar graph of the frame time history: the last 30 half-second samples are not kept, so draw the current value
+    const int bar = std::clamp(static_cast<int>(st.frameMilliseconds * 6.0f), 2, 360);
+    s_.sprites->Draw(*s_.textures->White(), Rectangle(12, 220, bar, 14), bar > 200 ? Color(255, 120, 80, 255) : green);
+    s_.sprites->Draw(*s_.textures->White(), Rectangle(12 + 100, 216, 2, 22), dim);   // the 16.7 ms mark
+    s_.sprites->End();
+    device.SetRenderTarget(nullptr);
+    diagnosticsAge_ = 0.0f;
+    ++rendered_;
 }
 
 Screens::~Screens() = default;
@@ -104,6 +157,10 @@ void Screens::Update(float dt, const Vector3& eye, const School::SchoolSim&)
     for (const Sign& s : signs_)
         if (Vector3::DistanceSquared(s.centre, eye) < kSignRange * kSignRange) signageNear_ = true;
     signageAge_ += dt;
+    diagnosticsNear_ = false;
+    for (const Monitor& m : monitors_)
+        if (Vector3::DistanceSquared(m.centre, eye) < 14.0f * 14.0f) diagnosticsNear_ = true;
+    diagnosticsAge_ += dt;
 }
 
 std::vector<WorldRenderer::Anchor> Screens::Anchors() const
@@ -214,6 +271,7 @@ void Screens::RenderOffscreen(GraphicsDevice& device, EffectBank& fx, SkyDome& s
 {
     rendered_ = 0;
     if (signageNear_ && signageAge_ >= 1.0f) RenderSignage(device, sim);
+    if (diagnosticsNear_ && diagnosticsAge_ >= 0.5f) RenderDiagnostics(device);
     if (!cctvActive_ || cameras_.empty()) return;
     // One of the four shown cameras per frame, round robin.
     const int shown = std::min(4, static_cast<int>(cameras_.size()));
@@ -357,6 +415,19 @@ void Screens::Draw(const DrawContext& ctx, const School::SchoolSim& sim, const W
             quads.push_back(q);
         }
     }
+    // Diagnostics monitors.
+    if (diagnosticsAge_ < 30.0f)
+        for (const Monitor& m : monitors_) {
+            if (Vector3::DistanceSquared(m.centre, ctx.view.eye) > 14.0f * 14.0f) continue;
+            Vector3 right, up, n;
+            panelAxes(m.yaw, 0.42f, 0.27f, right, up, n);
+            Quad q;
+            q.centre = m.centre + n * 0.003f;
+            q.right = right;
+            q.up = up;
+            q.texture = diagnostics_.get();
+            quads.push_back(q);
+        }
     // The auditorium's projection screen shows the signage.
     if (signageAge_ < 30.0f)
         for (const School::RoomId id : world.LoadedRooms()) {

@@ -53,10 +53,12 @@ detection. See `docs/NPC_SIMULATION.md`.
 - Screens refresh at a reduced rate: one CCTV camera per frame while the player is near the wall, signage
   once a second within 45 m, whiteboard content once per subject.
 - Audio keeps at most eight room ambiences, chosen by distance and occupancy four times a second.
+- `RoomEffects` animates only the specialist rooms that are loaded and within 45 m; `Screens` refreshes
+  door plates and board textures once and keeps them.
 
 ## Frame
 
 `Update`: input -> player (collision, ground height) -> simulation (`Advance(dt * timeScale)` with the focus
 set) -> world streaming -> doors near the player -> interactables -> audio.
-`Draw`: offscreen screens -> clear -> sky -> world (outdoor tinted, indoor, doors, glass) -> people -> screen
-quads -> weather -> debug lines -> HUD and map.
+`Draw`: offscreen screens -> clear -> sky -> world (outdoor tinted, indoor, doors, elevator cabs, glass) ->
+people -> screen quads -> room demonstrations -> weather -> debug lines -> HUD and map.

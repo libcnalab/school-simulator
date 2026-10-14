@@ -143,7 +143,7 @@ void PlayerController::Update(float dt, FirstPersonCamera& camera, const Collisi
         const float step = std::min(remaining, kMaxStepSeconds);
         Vector3 next = collision.Move(position, velocity * step, settings_.radius, level_);
         // The ground under the new place: a step up to 0.6 m is taken (stairs), anything higher is a wall.
-        const float ground = plan_.GroundHeight(School::Vec2{next.X, next.Z}, position.Y);
+        const float ground = riding_ ? rideY_ : plan_.GroundHeight(School::Vec2{next.X, next.Z}, position.Y);
         if (ground > position.Y + 0.6f) {
             next = position;   // blocked by a ledge
         } else {
@@ -155,8 +155,9 @@ void PlayerController::Update(float dt, FirstPersonCamera& camera, const Collisi
     }
     feet_ = position;
     level_ = plan_.LevelAt(feet_.Y);
-    // Smooth the vertical motion so stair steps do not jolt the view.
-    groundY_ += (feet_.Y - groundY_) * std::min(1.0f, dt * 14.0f);
+    // Smooth the vertical motion so stair steps do not jolt the view (a cab ride is smooth already).
+    if (riding_) groundY_ = feet_.Y;
+    else groundY_ += (feet_.Y - groundY_) * std::min(1.0f, dt * 14.0f);
 
     walked_ += travelled;
     stride_ += travelled;

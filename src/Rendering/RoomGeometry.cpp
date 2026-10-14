@@ -126,6 +126,7 @@ std::string WallTextureOf(const Room& room)
     case RoomType::Janitor:
     case RoomType::Archive:
     case RoomType::StairWell:
+    case RoomType::ElevatorCab:
     case RoomType::LockerHall: return "wall_concrete";
     default: return "wall_plaster";
     }
@@ -557,13 +558,17 @@ RoomGeometry BuildRoomGeometry(const SchoolPlan& plan, const School::LayoutCache
     g.outdoor = !room.Indoor();
     MeshSet& set = g.meshes;
 
+    const bool shaft = room.type == RoomType::ElevatorCab;
+    const School::ElevatorShaft* lift = shaft ? &plan.elevators[static_cast<std::size_t>(room.elevatorId)] : nullptr;
     // --- floor ---------------------------------------------------------------------------------------------
     const std::string floorTex = FloorTextureOf(plan, room);
     const float floorScale = room.type == RoomType::Gym ? 0.0f : (g.outdoor ? 4.0f : 2.0f);
     Vector3 floorTint = kWhite;
     if (room.type == RoomType::Corridor || room.type == RoomType::Lobby) floorTint = Vector3(0.9f, 0.9f, 0.9f);
     if (room.type == RoomType::AssemblyPoint) floorTint = Vector3(0.85f, 0.95f, 0.8f);
-    set.Opaque(floorTex).AddPatch(Vector3(r.x0, y0 + (g.outdoor ? 0.01f : 0.0f), r.z1), Vector3(r.Width(), 0, 0), Vector3(0, 0, -r.Depth()), floorScale, floorTint, g.outdoor ? 6.0f : 3.0f);
+    if (!shaft || room.level == lift->levelLow)   // a shaft has no floor but its pit
+        set.Opaque(floorTex).AddPatch(Vector3(r.x0, y0 + (g.outdoor ? 0.01f : 0.0f) - (shaft ? 1.2f : 0.0f), r.z1), Vector3(r.Width(), 0, 0), Vector3(0, 0, -r.Depth()), floorScale, shaft ? Vector3(0.3f, 0.3f, 0.32f) : floorTint,
+                                      g.outdoor ? 6.0f : 3.0f);
     if (room.type == RoomType::Gym && floorScale == 0.0f) {}   // the court texture is mapped once over the whole hall
 
     if (g.outdoor) {
@@ -617,10 +622,36 @@ RoomGeometry BuildRoomGeometry(const SchoolPlan& plan, const School::LayoutCache
     }
 
     // --- indoor: lights ------------------------------------------------------------------------------------
-    const float height = room.type == RoomType::StairWell ? School::kFloorHeight : room.Height();
+    const float height = room.type == RoomType::StairWell || shaft ? School::kFloorHeight : room.Height();
     const float ceilY = y0 + height;
-    g.ambient = Vector3(0.42f, 0.42f, 0.45f);
-    {
+    g.ambient = shaft ? Vector3(0.2f, 0.2f, 0.22f) : Vector3(0.42f, 0.42f, 0.45f);
+    if (shaft) {
+        // Dark shaft: one weak lamp per level, guide rails on the back wall, the cab itself is drawn by WorldRenderer.
+        BakedLight l;
+        l.position = Vector3(r.Center().x, ceilY - 0.2f, r.Center().z);
+        l.color = Vector3(0.9f, 0.9f, 1.0f);
+        l.intensity = 0.3f;
+        l.radius = 5.0f;
+        g.lights.push_back(l);
+        const Vec2 n = School::SideNormal(lift->entrySide);
+        const Vec2 back = r.Center() - n * (std::max(r.Width(), r.Depth()) * 0.5f - 0.08f);
+        const Vec2 along = n.RightHand();
+        for (const float side : {-0.9f, 0.9f}) {
+            const Vec2 p = back + along * side;
+            set.Opaque("white").AddBox(Vector3(p.x - 0.05f, y0 - (room.level == lift->levelLow ? 1.2f : 0.0f), p.z - 0.05f), Vector3(p.x + 0.05f, ceilY, p.z + 0.05f), 0.0f, Vector3(0.5f, 0.52f, 0.55f), BoxFaces::Sides, 4.0f);
+        }
+        // The hall call button on the corridor side of the door wall, with a lit dot.
+        for (const DoorId did : room.doors) {
+            const Door& d = plan.door(did);
+            const Vec2 out = n;   // the entry side's normal points out of the shaft into the corridor
+            const Vec2 at = d.pos + out * 0.02f + out.RightHand() * (d.width * 0.5f + 0.35f);
+            const Vector3 lo(std::min(at.x - 0.07f, at.x + out.x * 0.04f - 0.07f), y0 + 1.0f, std::min(at.z - 0.07f, at.z + out.z * 0.04f - 0.07f));
+            const Vector3 hi(std::max(at.x + 0.07f, at.x + out.x * 0.04f + 0.07f), y0 + 1.25f, std::max(at.z + 0.07f, at.z + out.z * 0.04f + 0.07f));
+            set.Opaque("white").AddBox(lo, hi, 0.0f, Vector3(0.75f, 0.76f, 0.8f), BoxFaces::All, 4.0f, 0.7f);   // bright: the shaft's own light is dim
+            const Vector3 dot = (lo + hi) * 0.5f + Vector3(out.x, 0, out.z) * 0.05f;
+            set.Opaque("white").AddBox(dot - Vector3(0.025f, 0.025f, 0.025f), dot + Vector3(0.025f, 0.025f, 0.025f), 0.0f, Vector3(1.0f, 0.6f, 0.1f), BoxFaces::All, 4.0f, 1.0f);
+        }
+    } else {
         const float spacing = room.type == RoomType::Corridor ? 5.0f : 4.2f;
         const int nx = std::max(1, static_cast<int>(std::lround(r.Width() / spacing)));
         const int nz = std::max(1, static_cast<int>(std::lround(r.Depth() / spacing)));
@@ -640,8 +671,29 @@ RoomGeometry BuildRoomGeometry(const SchoolPlan& plan, const School::LayoutCache
             }
     }
 
+    if (room.type == RoomType::Auditorium || room.type == RoomType::DramaStudio) {
+        // Coloured stage lights over the stage end (the far wall of the room's frame).
+        const RoomLayout& l0 = layouts.Get(id);
+        for (const Fixture& f : l0.fixtures) {
+            if (f.type != FixtureType::Stage) continue;
+            static const Vector3 kGels[] = {Vector3(1.0f, 0.3f, 0.2f), Vector3(0.3f, 0.5f, 1.0f), Vector3(1.0f, 0.85f, 0.4f), Vector3(0.4f, 1.0f, 0.5f)};
+            const float c = std::cos(f.yaw), sn = std::sin(f.yaw);
+            for (int i = 0; i < 4; ++i) {
+                const float u = (static_cast<float>(i) - 1.5f) * f.sx * 0.22f;
+                BakedLight l;
+                l.position = Vector3(f.pos.x + c * u, ceilY - 0.8f, f.pos.z - sn * u);
+                l.color = kGels[i];
+                l.intensity = 1.1f;
+                l.radius = 9.0f;
+                g.lights.push_back(l);
+                set.Opaque("white").AddBox(l.position + Vector3(-0.15f, -0.15f, -0.15f), l.position + Vector3(0.15f, 0.15f, 0.15f), 0.0f, kGels[i], BoxFaces::All, 4.0f, 1.0f);
+            }
+        }
+    }
+
+
     // --- ceiling -------------------------------------------------------------------------------------------
-    const bool topOfShaft = room.type != RoomType::StairWell || room.level == plan.stairs[static_cast<std::size_t>(room.stairId)].levelHigh;
+    const bool topOfShaft = (room.type != RoomType::StairWell || room.level == plan.stairs[static_cast<std::size_t>(room.stairId)].levelHigh) && (!shaft || room.level == lift->levelHigh);
     if (topOfShaft) {
         const char* ceilTex = room.levels > 1 ? "wall_concrete" : "ceiling_tile";
         const Vector3 ceilTint = room.levels > 1 ? Vector3(0.5f, 0.5f, 0.52f) : kWhite;

@@ -5,9 +5,16 @@ Working notes for whoever continues (human or agent). Dates are when something w
 ## State (2026-10-14)
 
 - First session of the project. The simulation core (plan, navigation, timetable, schedule, three-fidelity
-  simulation, tests) and the CNA application (player, lazily built world, people, sky, weather, screens, audio,
-  HUD, map, scripting) exist and run. `school_tests`: 118 656 checks, 0 failures. `school-sim-cli --day --check`
-  passes at normal and extreme population. `tools/tour.sh` photographs 17 places on OPENGLES3 with no draw errors.
+  simulation, elevators, tests) and the CNA application (player, lazily built world, people, sky, weather,
+  screens, room demonstrations, audio, HUD, map, scripting) exist and run. `school_tests`: 154 500 checks,
+  0 failures; `school_app_tests`: 3.46 million checks, 0 failures. `school-sim-cli --day --check` passes at
+  normal, busy and extreme population. `tools/tour.sh` photographs 17 places on OPENGLES3 and OPENGL33 with no
+  draw errors. A one-day soak at x30 with the busy preset: resident memory 279 -> 302 MB over 3.5 school hours,
+  flat afterwards (navigation trees and door plates filling up).
+- Elevators (2026-10-14): two shafts (east and west wings, levels 1-4) with cabs, calls, capacity 8, boarding
+  and alighting at full fidelity, timed rides for abstract walkers, the player can ride (call button, cab
+  buttons). Riders are the people who prefer the lift (`Npc::usesElevator`: 6 % of students, half the teachers,
+  most staff); they route through `NavGraph(plan, true)`; fire drills never use the lift.
 - Verified only on the OPENGLES3 renderer (Mesa llvmpipe under Xvfb, no GPU on the build machine). A
   multi-renderer tree (OPENGLES3, OPENGL33, SOFTWARE) is the next thing to build and run; results go to
   `docs/RENDERER_TESTING.md`.
@@ -33,12 +40,14 @@ Project rules from `../CLAUDE.md` apply: one shared ccache (`CCACHE_DIR=/rv/cnac
 | Change the building | `src/World/Blueprint.cpp` (strips, cores and programs per wing and level), `ValidatePlan` guards it |
 | Furniture and spots of a room type | `src/Rooms/RoomLayout.cpp` (`Gen::Run` dispatches per type) |
 | How people decide where to go | `SchoolSim::GoalFor` in `src/Simulation/SchoolSim.cpp` |
-| Walking, doors, fidelity, drills | `src/Simulation/AgentMotion.cpp` |
+| Walking, doors, elevators, fidelity, drills | `src/Simulation/AgentMotion.cpp` (`UpdateElevators`, the ride branch of `StepFull`) |
 | Routes and waypoints | `src/Navigation/NavGraph.cpp` (`PathBuilder::Build`) |
 | How a room looks | `src/Rendering/RoomGeometry.cpp` (`BuildRoomGeometry`, `AddFixture`, `AddStairs`, `BuildFacadeGeometry`) |
 | What is loaded and drawn | `src/Rendering/WorldRenderer.cpp` (`Update` decides, `Draw` culls, `DrawDoors` animates) |
 | People on screen | `src/Rendering/NpcRenderer.cpp` (`AddFigure` is the whole skeleton) |
-| Screens | `src/Rendering/Screens.cpp` (CCTV cameras, signage, whiteboards) |
+| Screens | `src/Rendering/Screens.cpp` (CCTV cameras, signage, whiteboards, door plates, diagnostics monitors) |
+| Animated demonstrations | `src/Rendering/RoomEffects.cpp` |
+| Elevator cabs, doors, player ride | `WorldRenderer::DrawElevators`, `SchoolGame::UpdateElevators`, `PlayerController::SetRide` |
 | Keys, HUD content, scripting | `src/App/SchoolGame.cpp` (`HandleSystemKeys`, `Draw`, `RunScript`) |
 | Sounds | `src/Audio/SchoolAudio.cpp` |
 
@@ -56,18 +65,16 @@ Project rules from `../CLAUDE.md` apply: one shared ccache (`CCACHE_DIR=/rv/cnac
 
 ## What is next (priority order)
 
-1. **Renderer testing**: build the multi-renderer tree, run `tools/tour.sh -r OPENGL33` and `-r SOFTWARE`
-   (SOFTWARE is slow: raise the timeout), record in `docs/RENDERER_TESTING.md`, fix CNA where it differs.
-2. **Door plates and signs**: room codes on a plate beside every door (render-target text, `Screens`), wing
-   names at corridor ends, "you are here" boards by the staircases.
-3. **Specialist room demonstrations**: pendulum and projectile in the physics labs, bubbling flasks in
-   chemistry, running machines in the workshops, bouncing balls in the gym, a projected picture in the
-   auditorium: small animated lit objects per loaded room (`Shapes` + `EffectBank::BeginLit`).
-4. **Elevators**: the plan supports shafts (`ElevatorShaft`, `RoomType::ElevatorCab`) but none are placed;
-   the lobby could get two. Needs cab motion, calls, NPC boarding, a navigation edge with waiting cost.
-5. **App-level tests**: a `school_app_tests` target that builds the geometry of every room and the facade
-   (no device needed) and checks bounds and sizes; a leak check over three tours.
-6. **Performance on a GPU**: measure; corridor segments could be merged per wing, far rooms could share a
-   simplified mesh; NPCs beyond 110 m are not drawn at all.
-7. **Polish**: stairwell lighting is dim, lobby interior needs more presence (signage exists, add benches
-   and a trophy cabinet), the car park cars are boxes, trees are two spheres.
+1. **SOFTWARE renderer**: finish `SCHOOL_TIMEOUT=1500 tools/tour.sh -r SOFTWARE -o build/shots-software`
+   (very slow here) and record it in `docs/RENDERER_TESTING.md`; compare pictures across the three renderers.
+2. **Performance on a GPU**: nothing has been measured on hardware. Corridor segments could be merged per wing,
+   far rooms could share a simplified mesh, people beyond 110 m are not drawn at all.
+3. **Signs**: wing names at corridor ends, "you are here" boards by the staircases (the door plates and the
+   lobby signage show how: `Screens::PlateFor`, `Screens::RenderSignage`).
+4. **More demonstrations**: a projected picture in the auditorium (slides), monitors in the computer labs
+   that show something, steam over the kitchen, a metronome in the music room.
+5. **Elevator polish**: a floor indicator above the hall door, a chime on arrival, the cab's inner door; a
+   second pair of lifts in the north and south wings if traffic warrants.
+6. **Polish**: stairwell lighting is dim, lobby interior needs more presence (benches and a trophy cabinet),
+   the car park cars are boxes, trees are two spheres, the server room is a wall of black racks.
+7. **Soak tooling**: `tools/soak.sh` that runs a day at x30 and fails on memory growth or stuck people.

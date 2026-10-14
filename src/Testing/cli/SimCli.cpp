@@ -45,8 +45,8 @@ int main(int argc, char** argv)
     }
     if (stats) {
         const PlanStats s = ComputeStats(plan);
-        std::printf("rooms %d (indoor %d, outdoor zones %d, corridor segments %d), doors %d, stairs %d, indoor area %.0f m2\n", s.rooms,
-                    s.indoorRooms, s.outdoorZones, s.corridors, s.doors, s.stairs, static_cast<double>(s.indoorAreaM2));
+        std::printf("rooms %d (indoor %d, outdoor zones %d, corridor segments %d), doors %d, stairs %d, elevators %d, indoor area %.0f m2\n", s.rooms,
+                    s.indoorRooms, s.outdoorZones, s.corridors, s.doors, s.stairs, s.elevators, static_cast<double>(s.indoorAreaM2));
     }
     if (population) {
         PopulationSpec spec = PopulationSpec::FromPreset(preset);
@@ -67,12 +67,13 @@ int main(int argc, char** argv)
     }
     if (day) {
         const NavGraph nav(plan);
+        const NavGraph liftNav(plan, true);
         const LayoutCache layouts(plan);
         SimSettings settings;
         settings.preset = preset;
         settings.students = students;
         settings.enableFull = full;
-        SchoolSim sim(plan, nav, layouts, BellSchedule::Default(), settings);
+        SchoolSim sim(plan, nav, layouts, BellSchedule::Default(), settings, &liftNav);
         std::printf("simulating %d day(s): %zu npcs\n", days, sim.Pop().npcs.size());
         const auto t0 = std::chrono::steady_clock::now();
         for (int d = 0; d < days; ++d) {
@@ -115,8 +116,8 @@ int main(int argc, char** argv)
         }
         const double secs = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
         const SimStats& st = sim.Stats();
-        std::printf("%.2f s wall; path builds %d, events %lld, door passes %lld, unstuck %lld, unreachable %d, bells %d, late arrivals %.0f\n", secs, st.pathBuilds, st.events,
-                    st.doorPasses, st.unstuck, st.unreachable, st.bellsRung, st.lateArrivals);
+        std::printf("%.2f s wall; path builds %d, events %lld, door passes %lld, elevator rides %lld, unstuck %lld, unreachable %d, bells %d, late arrivals %.0f\n", secs,
+                    st.pathBuilds, st.events, st.doorPasses, st.elevatorRides, st.unstuck, st.unreachable, st.bellsRung, st.lateArrivals);
         if (check && (st.unreachable > 0)) status = 1;
     }
     return status;

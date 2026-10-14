@@ -67,6 +67,7 @@ const char* SchoolAudio::AmbienceFor(const Room& room, const School::SchoolSim& 
 void SchoolAudio::Update(float dt, const Vector3& listener, const Vector3& forward, School::SchoolSim& sim, const WorldRenderer& world, RoomId playerRoom, bool outdoors)
 {
     audio_.SetListener(listener, forward);
+    listener_ = listener;
     outdoors_ = outdoors;
     // Doors near the player.
     int doorSounds = 0;
@@ -75,7 +76,7 @@ void SchoolAudio::Update(float dt, const Vector3& listener, const Vector3& forwa
         const Vector3 at(def.pos.x, plan_.FloorY(def.level) + 1.2f, def.pos.z);
         if (Vector3::DistanceSquared(at, listener) > 30.0f * 30.0f || doorSounds > 6) continue;
         ++doorSounds;
-        const char* name = def.kind == School::DoorKind::Automatic ? "door_slide" : (d.opening ? "door_open" : "door_close");
+        const char* name = def.kind == School::DoorKind::Automatic || def.kind == School::DoorKind::ElevatorDoor ? "door_slide" : (d.opening ? "door_open" : "door_close");
         audio_.PlayAt(name, at, def.kind == School::DoorKind::External ? 0.7f : 0.45f, 22.0f);
     }
     // Room ambiences: rescan a few times a second.
@@ -173,8 +174,31 @@ void SchoolAudio::Footstep(bool running, bool hardFloor)
 
 void SchoolAudio::Announce(int which)
 {
-    audio_.PlayUi("chime", 0.6f);
-    audio_.PlayUi(which % 2 == 0 ? "announce1" : "announce2", 0.7f);
+    // The PA speakers hang in every corridor and hall: the nearest few play, so the message comes from the building,
+    // not from inside the listener's head. Outdoors (no speaker near) a quiet copy plays from the nearest one anyway.
+    const char* name = which % 2 == 0 ? "announce1" : "announce2";
+    struct Speaker {
+        float d2;
+        Vector3 at;
+    };
+    std::vector<Speaker> near;
+    for (const School::Room& r : plan_.rooms) {
+        if (!r.Indoor() || !School::Info(r.type).circulation) continue;
+        const Vector3 at(r.rect.Center().x, plan_.FloorY(r.level) + 2.6f, r.rect.Center().z);
+        const float d2 = Vector3::DistanceSquared(at, listener_);
+        if (d2 < 45.0f * 45.0f) near.push_back({d2, at});
+    }
+    std::sort(near.begin(), near.end(), [](const Speaker& a, const Speaker& b) { return a.d2 < b.d2; });
+    if (near.size() > 4) near.resize(4);
+    if (near.empty()) {
+        audio_.PlayUi("chime", 0.25f);
+        audio_.PlayUi(name, 0.3f);
+        return;
+    }
+    for (const Speaker& sp : near) {
+        audio_.PlayAt("chime", sp.at, 0.5f, 40.0f);
+        audio_.PlayAt(name, sp.at, 0.6f, 40.0f);
+    }
 }
 
 void SchoolAudio::Bell(bool alarm)

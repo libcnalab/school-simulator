@@ -13,14 +13,14 @@ scheduling experiment.
 
 | Area | Highlights |
 |---|---|
-| School | North (humanities), East (science), South (administration, arts, computing), West (languages, mathematics) wings on 6 levels; sports block (gym, changing rooms, workshops); community block (cafeteria, kitchen, auditorium, library, music hall, drama studio); basement (lockers, boiler, servers, archive); campus (courtyard, plazas, playground, track, football field, car park, bicycle area, assembly points) |
+| School | North (humanities), East (science), South (administration, arts, computing), West (languages, mathematics) wings on 6 levels with ten staircases and two elevators; sports block (gym, changing rooms, workshops); community block (cafeteria, kitchen, auditorium, library, music hall, drama studio); basement (lockers, boiler, servers, archive); campus (courtyard, plazas, playground, track, football field, car park, bicycle area, assembly points) |
 | Rooms | 40 room types, each with its own furniture and the places people occupy: desks and chairs, lab benches, computer desks with monitors, easels, a piano, shelves full of books, theatre seats, a stage, serving counter and queue lanes, lockers, server racks, beds, hoops and scoreboards |
 | People | students in classes with a weekly timetable, teachers, reception, admin, nurse, counsellor, IT, security, cooks, librarians, janitors; population presets from empty to extreme (2400 students) |
-| Simulation | event-driven at three fidelity levels (abstract / reduced / full), hierarchical navigation (room graph plus waypoints, aisles inside rooms, stairs), door gates with throughput, lane walking, local separation, stuck detection, lunch waves, after-school clubs, patrols, fire drills with assembly points; deterministic from a seed |
-| Rendering | room interiors built lazily around the player, facade and roofs, animated door leaves, box-figure people with poses and a walk cycle, day and night sky, fog, rain and snow, CCTV wall rendered into render targets, digital signage, whiteboards showing the lesson in progress |
+| Simulation | event-driven at three fidelity levels (abstract / reduced / full), hierarchical navigation (room graph plus waypoints, aisles inside rooms, stairs, elevator rides for those who prefer the lift), door gates with throughput, elevator cabs with calls, capacity and boarding, lane walking, local separation, stuck detection, lunch waves, after-school clubs, patrols, fire drills with assembly points; deterministic from a seed |
+| Rendering | room interiors built lazily around the player, facade and roofs, animated door leaves and elevator cabs, box-figure people with poses and a walk cycle, day and night sky, fog, rain and snow, CCTV wall rendered into render targets, digital signage, whiteboards showing the lesson in progress, room code plates at every door, diagnostics monitors in the server room, animated demonstrations in the labs, workshops and gym |
 | Audio | bells, alarm, doors, footsteps, room ambiences that follow occupancy, corridor chatter that follows the crowd around you, PA announcements, rain |
 | UI | clock and phase, room banners with the lesson and teacher, prompts, toasts, minimap and full campus map, F3 statistics, F4 debug overlays (paths and fidelity, bounds and navigation nodes, collision boxes) |
-| Testing | 118 000+ checks in `school_tests` (plan, navigation, timetable, schedule, layouts, determinism, full vs abstract agreement, drills, six-day soak), CTest days at normal and extreme population, a headless screenshot tour |
+| Testing | 150 000+ checks in `school_tests` (plan, navigation, elevators, timetable, schedule, layouts, determinism, full vs abstract agreement, drills, six-day soak), 3.4 million in `school_app_tests` (geometry of every room, collision at every door), CTest days at normal and extreme population, a headless screenshot tour on three renderers |
 
 ## Build
 
@@ -45,7 +45,8 @@ build/bin/cna-school-simulator --help
 
 Controls: `W A S D` walk, mouse look, `Shift` run, `E` / click use, `Esc` pause, `F1` help, `F3` statistics,
 `F4` debug overlays, `Tab` map, `M` minimap, `Space` stop the clock, `1`..`5` time x1 x2 x5 x10 x30, `N` next lesson,
-`B` bell, `F` fire drill, `P` announcement, `O` weather, `R` back to the entrance, `F11` fullscreen, `F2` mute.
+`B` bell, `F` fire drill, `P` announcement, `O` weather, `,` `.` fifteen minutes back or on, `R` back to the entrance, `F11` fullscreen, `F2` mute.
+Elevators: `E` on the call button beside the door, step in, `E` on the panel's up or down button.
 A gamepad works too (left stick walk, right stick look, A use, Start pause, Y map).
 
 Headless (no display): `xvfb-run -a -s "-screen 0 1280x720x24" build/bin/cna-school-simulator --no-audio --script "..."`.

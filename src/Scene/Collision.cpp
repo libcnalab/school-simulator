@@ -118,6 +118,7 @@ void CollisionWorld::GatherBoxes(float x, float z, int level, std::vector<const 
             stairSolids_.emplace_back(Vector3(s.rect.x0, s.y0, s.rect.z0), Vector3(s.rect.x1, s.y1, s.rect.z1));
     }
     out.push_back(&stairSolids_);
+    out.push_back(&dynamic_);
     for (const RoomId id : RoomsAround(School::Vec2{x, z}, level, 1.5f)) out.push_back(&RoomBoxes(id));
 }
 

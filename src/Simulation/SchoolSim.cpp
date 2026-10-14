@@ -28,10 +28,41 @@ PopulationSpec SpecOf(const SimSettings& s, int periods)
 
 }  // namespace
 
-SchoolSim::SchoolSim(const SchoolPlan& plan, const NavGraph& nav, const LayoutCache& layouts, BellSchedule schedule, const SimSettings& settings)
+SchoolSim::SchoolSim(const SchoolPlan& plan, const NavGraph& nav, const LayoutCache& layouts, BellSchedule schedule, const SimSettings& settings, const NavGraph* liftNav)
     : plan_(plan), nav_(nav), layouts_(layouts), schedule_(std::move(schedule)), settings_(settings), paths_(nav)
 {
+    if (liftNav != nullptr && liftNav->HasElevators()) liftPaths_ = std::make_unique<PathBuilder>(*liftNav);
     Init();
+}
+
+ElevatorStatus SchoolSim::Elevator(int shaft) const
+{
+    ElevatorStatus st;
+    if (shaft < 0 || shaft >= static_cast<int>(elevators_.size())) return st;
+    const ElevatorRuntime& r = elevators_[static_cast<std::size_t>(shaft)];
+    st.shaft = shaft;
+    st.y = r.y;
+    st.level = r.level;
+    st.target = r.target;
+    st.doorOpen = r.door;
+    st.moving = r.state == ElevatorRuntime::State::Moving;
+    st.passengers = r.passengers;
+    return st;
+}
+
+void SchoolSim::CallElevator(int shaft, int level)
+{
+    if (shaft < 0 || shaft >= static_cast<int>(elevators_.size())) return;
+    const ElevatorShaft& e = plan_.elevators[static_cast<std::size_t>(shaft)];
+    if (level < e.levelLow || level > e.levelHigh) return;
+    ElevatorRuntime& r = elevators_[static_cast<std::size_t>(shaft)];
+    const std::size_t idx = static_cast<std::size_t>(level - e.levelLow);
+    // A call for the level the cab is standing at with its doors open just holds them a little longer.
+    if (level == r.level && r.state == ElevatorRuntime::State::Open) {
+        r.timer = std::max(r.timer, 2.0f);
+        return;
+    }
+    r.calls[idx] = 1;
 }
 
 void SchoolSim::Init()
@@ -43,6 +74,21 @@ void SchoolSim::Init()
     fullInRoom_.assign(plan_.rooms.size(), 0);
     assemblyLoad_.assign(plan_.assemblyPoints.size(), 0);
     classRank_.assign(pop_.npcs.size(), 0);
+    elevators_.clear();
+    for (const ElevatorShaft& e : plan_.elevators) {
+        ElevatorRuntime r;
+        r.y = plan_.FloorY(e.levelLow);
+        r.level = e.levelLow;
+        r.calls.assign(e.cab.size(), 0);
+        for (const RoomId cab : e.cab) {
+            DoorId door = kNone;
+            if (cab != kNone)
+                for (const DoorId d : plan_.room(cab).doors)
+                    if (plan_.door(d).kind == DoorKind::ElevatorDoor) door = d;
+            r.doorIds.push_back(door);
+        }
+        elevators_.push_back(std::move(r));
+    }
     for (const ClassGroup& g : pop_.classes)
         for (std::size_t i = 0; i < g.students.size(); ++i) classRank_[static_cast<std::size_t>(g.students[i])] = static_cast<int>(i);
     // Patrol zones: the indoor rooms of each (level, wing) a janitor sweeps.
@@ -88,6 +134,7 @@ void SchoolSim::Advance(double seconds)
         ProcessEventsUntil(time_);
         CheckDrills();
         UpdateDoors(static_cast<float>(step));
+        UpdateElevators(static_cast<float>(step));
         StepFullAll(static_cast<float>(step));
         fidelityTimer_ += step;
         if (fidelityTimer_ >= 0.5) {
@@ -154,6 +201,16 @@ void SchoolSim::JumpToTime(double timeOfDay)
     dineCounter_ = 0;
     std::fill(assemblyLoad_.begin(), assemblyLoad_.end(), 0);
     drill_ = DrillStatus{};
+    for (std::size_t i = 0; i < elevators_.size(); ++i) {
+        ElevatorRuntime& r = elevators_[i];
+        r.y = plan_.FloorY(plan_.elevators[i].levelLow);
+        r.level = plan_.elevators[i].levelLow;
+        r.target = -1;
+        r.state = ElevatorRuntime::State::Idle;
+        r.door = 0.0f;
+        r.passengers = 0;
+        std::fill(r.calls.begin(), r.calls.end(), 0);
+    }
     StartDay();
     FastForwardTo(timeOfDay);
 }

@@ -47,8 +47,8 @@ public:
     /** Chooses which rooms to keep in memory around the player (and the anchors) and builds a few of them. */
     void Update(const Microsoft::Xna::Framework::Vector3& eye, int level, float dt);
     void Update(const Microsoft::Xna::Framework::Vector3& eye, int level, float dt, const std::vector<Anchor>& anchors);
-    /** Draws the opaque world, then door leaves, then glass. */
-    void Draw(const DrawContext& ctx, const WorldLighting& light, const std::vector<School::DoorRuntime>& doors);
+    /** Draws the opaque world, then door leaves and elevator cabs, then glass. */
+    void Draw(const DrawContext& ctx, const WorldLighting& light, const std::vector<School::DoorRuntime>& doors, const std::vector<School::ElevatorStatus>& elevators = {});
 
     [[nodiscard]] bool IsLoaded(School::RoomId room) const { return rooms_.count(room) != 0; }
     [[nodiscard]] const std::vector<School::RoomId>& LoadedRooms() const { return loadedList_; }
@@ -93,6 +93,7 @@ private:
     float DistanceTo(const School::Room& room, const Microsoft::Xna::Framework::Vector3& eye) const;
     void DrawBatches(const DrawContext& ctx, const std::vector<Batch>& batches, bool transparent);
     void DrawDoors(const DrawContext& ctx, const WorldLighting& light, const std::vector<School::DoorRuntime>& doors);
+    void DrawElevators(const DrawContext& ctx, const std::vector<School::ElevatorStatus>& elevators);
 
     Services& s_;
     const School::SchoolPlan& plan_;

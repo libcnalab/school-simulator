@@ -410,6 +410,8 @@ public:
                 AddRoom(level, strip.wing, RoomType::Corridor, rect, 1, "Link corridor");
             } else if (code == "VOID") {
                 // deliberately empty: something larger is placed here by hand
+            } else if (code == "ELEV") {
+                AddElevatorCab(level, strip.wing, rect, strip.doorSide, alongX ? Side::East : Side::South);
             } else if (const SlotCode* slot = FindSlot(code)) {
                 const RoomId id = AddRoom(level, strip.wing, slot->type, rect);
                 PlaceDoor(id, strip.doorSide, c.at + c.width * 0.5f, DoorKind::Single, 1.1f);
@@ -417,6 +419,54 @@ public:
             cursor = c.at + c.width;
         }
         if (end - cursor >= 1.0f) FillGap(level, strip, cursor, end, nextProgram());
+        // Closets behind the elevator shafts open into the room beside them (placed now that it exists).
+        for (const auto& [closet, towards] : pendingClosets_) {
+            const Rect& cr = R(closet).rect;
+            const bool ax = towards == Side::East || towards == Side::West;
+            if (PlaceDoor(closet, towards, ax ? cr.Center().z : cr.Center().x, DoorKind::Single, 0.9f) == kNone)
+                PlaceDoor(closet, Opposite(towards), ax ? cr.Center().z : cr.Center().x, DoorKind::Single, 0.9f);
+        }
+        pendingClosets_.clear();
+    }
+
+    // --- elevators ---------------------------------------------------------------------------------------------
+    /** A shaft core: the cab (2.6 x 2.6) at the corridor side of the core's rectangle, a closet behind it. */
+    void AddElevatorCab(int level, int wing, const Rect& core, Side entrySide, Side closetDoorSide)
+    {
+        constexpr float kCab = 2.6f;
+        Rect cab, closet;
+        switch (entrySide) {
+        case Side::North: cab = {core.x0, core.z0, core.x1, core.z0 + kCab}; closet = {core.x0, core.z0 + kCab, core.x1, core.z1}; break;
+        case Side::South: cab = {core.x0, core.z1 - kCab, core.x1, core.z1}; closet = {core.x0, core.z0, core.x1, core.z1 - kCab}; break;
+        case Side::West: cab = {core.x0, core.z0, core.x0 + kCab, core.z1}; closet = {core.x0 + kCab, core.z0, core.x1, core.z1}; break;
+        default: cab = {core.x1 - kCab, core.z0, core.x1, core.z1}; closet = {core.x0, core.z0, core.x1 - kCab, core.z1}; break;
+        }
+        int shaft = kNone;
+        for (const ElevatorShaft& e : plan.elevators)
+            if (std::fabs(e.footprint.x0 - cab.x0) < 1e-3f && std::fabs(e.footprint.z0 - cab.z0) < 1e-3f) shaft = e.id;
+        if (shaft == kNone) {
+            ElevatorShaft e;
+            e.id = static_cast<int>(plan.elevators.size());
+            e.footprint = cab;
+            e.entrySide = entrySide;
+            e.levelLow = e.levelHigh = level;
+            plan.elevators.push_back(e);
+            shaft = e.id;
+        }
+        const RoomId id = AddRoom(level, wing, RoomType::ElevatorCab, cab, 1, "Elevator");
+        R(id).elevatorId = shaft;
+        R(id).capacity = 8;
+        ElevatorShaft& e = plan.elevators[static_cast<std::size_t>(shaft)];
+        e.levelLow = std::min(e.levelLow, level);
+        e.levelHigh = std::max(e.levelHigh, level);
+        e.cab.resize(static_cast<std::size_t>(e.levelHigh - e.levelLow + 1), kNone);
+        e.cab[static_cast<std::size_t>(level - e.levelLow)] = id;
+        const bool alongX = entrySide == Side::North || entrySide == Side::South;
+        PlaceDoor(id, entrySide, alongX ? cab.Center().x : cab.Center().z, DoorKind::ElevatorDoor, 1.1f);
+        if (closet.Valid() && closet.Width() > 1.0f && closet.Depth() > 1.0f) {
+            const RoomId c = AddRoom(level, wing, RoomType::Janitor, closet, 1, "Elevator closet");
+            pendingClosets_.emplace_back(c, closetDoorSide);
+        }
     }
 
     // --- stairs ------------------------------------------------------------------------------
@@ -512,6 +562,7 @@ public:
 
 private:
     std::map<std::pair<int, int>, int> counters_;
+    std::vector<std::pair<RoomId, Side>> pendingClosets_;
 };
 
 }  // namespace
@@ -591,7 +642,7 @@ SchoolPlan BuildSchoolPlan(const PlanOptions& /*options*/)
 
         // --- East wing: science ---------------------------------------------------------------------
         if (sides) {
-            const std::vector<Core> eoCores = {{55, 4, "LINK", L({1})}, {63, 8, "STAIR", kAll}, {71, 6, "TO", kAll}, {77, 6, "TO", kAll}};
+            const std::vector<Core> eoCores = {{55, 4, "LINK", L({1})}, {63, 8, "STAIR", kAll}, {71, 2.6f, "ELEV", kAll}, {73.6f, 3.4f, "TO", kAll}, {77, 6, "TO", kAll}};
             const std::vector<Core> eiCores = {{58, 4, "PASSAGE", L({1})}};
             if (ground) {
                 b.BuildStrip(level, EO, eoCores, {"CL*", "OF", "BI PP BI PP"});
@@ -610,7 +661,7 @@ SchoolPlan BuildSchoolPlan(const PlanOptions& /*options*/)
 
         // --- West wing: languages and mathematics ----------------------------------------------------
         if (sides) {
-            const std::vector<Core> woCores = {{55, 4, "LINK", L({1})}, {63, 8, "STAIR", kAll}, {71, 6, "TO", kAll}, {77, 6, "TO", kAll}, {83, 4, "LINK", L({1})}};
+            const std::vector<Core> woCores = {{55, 4, "LINK", L({1})}, {63, 8, "STAIR", kAll}, {71, 2.6f, "ELEV", kAll}, {73.6f, 3.4f, "TO", kAll}, {77, 6, "TO", kAll}, {83, 4, "LINK", L({1})}};
             const std::vector<Core> wiCores = {{58, 4, "PASSAGE", L({1})}};
             if (ground) {
                 b.BuildStrip(level, WO, woCores, {"CL*", "LA*"});

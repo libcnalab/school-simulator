@@ -21,8 +21,9 @@ namespace School {
 struct NavEdge {
     RoomId from = kNone;
     RoomId to = kNone;
-    DoorId door = kNone;     // kNone for a stair edge
+    DoorId door = kNone;     // kNone for a stair or elevator edge
     int stair = kNone;       // stair shaft id for a stair edge
+    int elevator = kNone;    // elevator shaft id for a ride between two cab rooms
     int pairedEdge = kNone;  // the same connection in the other direction
     float cost = 0.0f;       // metres of walking (stairs include a penalty)
     bool upward = false;     // stair edges: climbing
@@ -30,7 +31,9 @@ struct NavEdge {
 
 class NavGraph {
 public:
-    explicit NavGraph(const SchoolPlan& plan);
+    /** With `elevators`, rides between the cab rooms of a shaft are edges too (cheaper than stairs over two or more levels). */
+    explicit NavGraph(const SchoolPlan& plan, bool elevators = false);
+    [[nodiscard]] bool HasElevators() const { return elevators_; }
 
     [[nodiscard]] const SchoolPlan& Plan() const { return plan_; }
     [[nodiscard]] int NodeCount() const { return static_cast<int>(plan_.rooms.size()); }
@@ -60,6 +63,7 @@ private:
     [[nodiscard]] const Tree& TreeTo(RoomId dest) const;
 
     const SchoolPlan& plan_;
+    bool elevators_ = false;
     std::vector<NavEdge> edges_;
     std::vector<std::vector<int>> adjacency_;
     mutable std::vector<std::unique_ptr<Tree>> trees_;
@@ -74,6 +78,7 @@ enum class WaypointKind : std::uint8_t {
     Doorway,       // in the door itself (opens it)
     DoorExit,      // just past the door
     StairStep,     // on a flight of stairs (height changes)
+    Ride,          // inside an elevator cab: the cab carries the walker to the next Ride point's level
     Spot           // the final place (a seat, a queue slot, a standing point)
 };
 
@@ -105,6 +110,7 @@ public:
 private:
     void AddRoomCrossing(const Room& room, Vec2 enter, Vec2 leave, bool enterIsPortal, bool leaveIsPortal, std::vector<Waypoint>& out, float lane) const;
     void AddStairs(const NavEdge& edge, Vec2 enterPos, std::vector<Waypoint>& out) const;
+    void AddRide(const NavEdge& edge, std::vector<Waypoint>& out) const;
     const NavGraph& graph_;
 };
 

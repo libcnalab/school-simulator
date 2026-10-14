@@ -178,6 +178,7 @@ Population BuildPopulation(const SchoolPlan& plan, const PopulationSpec& spec)
             n.classId = c;
             n.look = static_cast<std::uint32_t>(Hash(seed, static_cast<std::uint64_t>(n.id), 3));
             n.speed = 1.15f + 0.35f * Unit(Hash(seed, static_cast<std::uint64_t>(n.id), 4));
+            n.usesElevator = Unit(Hash(seed, static_cast<std::uint64_t>(n.id), 8)) < 0.06f;
             g.students.push_back(n.id);
             pop.npcs.push_back(std::move(n));
         }
@@ -191,6 +192,7 @@ Population BuildPopulation(const SchoolPlan& plan, const PopulationSpec& spec)
         n.classId = classCount - 1;
         n.look = static_cast<std::uint32_t>(Hash(seed, static_cast<std::uint64_t>(n.id), 3));
         n.speed = 1.15f + 0.35f * Unit(Hash(seed, static_cast<std::uint64_t>(n.id), 4));
+        n.usesElevator = Unit(Hash(seed, static_cast<std::uint64_t>(n.id), 8)) < 0.06f;
         pop.classes.back().students.push_back(n.id);
         pop.npcs.push_back(std::move(n));
         --studentsLeft;
@@ -228,6 +230,7 @@ Population BuildPopulation(const SchoolPlan& plan, const PopulationSpec& spec)
             t.name = MakeName(seed, t.id);
             t.look = static_cast<std::uint32_t>(Hash(seed, static_cast<std::uint64_t>(t.id), 3));
             t.speed = 1.1f + 0.3f * Unit(Hash(seed, static_cast<std::uint64_t>(t.id), 4));
+            t.usesElevator = Unit(Hash(seed, static_cast<std::uint64_t>(t.id), 8)) < 0.5f;
             teachersOf[static_cast<std::size_t>(s)].push_back(t.id);
             pop.teachers.push_back(t.id);
             pop.npcs.push_back(std::move(t));
@@ -384,6 +387,7 @@ Population BuildPopulation(const SchoolPlan& plan, const PopulationSpec& spec)
             n.name = MakeName(seed, n.id);
             n.look = static_cast<std::uint32_t>(Hash(seed, static_cast<std::uint64_t>(n.id), 3));
             n.speed = 1.1f + 0.3f * Unit(Hash(seed, static_cast<std::uint64_t>(n.id), 4));
+            n.usesElevator = Unit(Hash(seed, static_cast<std::uint64_t>(n.id), 8)) < 0.65f;
             n.base = pick(rooms, spreadOverRooms ? i : 0);
             n.baseSpot = spreadOverRooms ? i / std::max(1, static_cast<int>(rooms.size())) : i;
             n.zone = i;

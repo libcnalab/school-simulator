@@ -32,6 +32,18 @@ using School::RoomId;
 using School::RoomType;
 
 namespace {
+/** Resident set size of this process in megabytes (Linux), or -1. */
+long ResidentMegabytes()
+{
+    long pages = -1;
+    if (FILE* f = std::fopen("/proc/self/statm", "r")) {
+        long size = 0;
+        if (std::fscanf(f, "%ld %ld", &size, &pages) != 2) pages = -1;
+        std::fclose(f);
+    }
+    return pages < 0 ? -1 : pages * 4096L / (1024L * 1024L);
+}
+
 constexpr float kFov = 70.0f * MathHelper::Pi / 180.0f;
 constexpr float kMaxFrameSeconds = 0.1f;
 constexpr float kNearPlane = 0.15f;
@@ -86,6 +98,7 @@ void SchoolGame::LoadContent()
     plan_ = School::BuildSchoolPlan(School::PlanOptions{options_.seed});
     for (const std::string& problem : School::ValidatePlan(plan_)) School::Log("plan", "INVALID: %s", problem.c_str());
     nav_ = std::make_unique<School::NavGraph>(plan_);
+    liftNav_ = std::make_unique<School::NavGraph>(plan_, true);
     layouts_ = std::make_unique<School::LayoutCache>(plan_);
     School::BellSchedule schedule = School::BellSchedule::Default();
     {
@@ -109,14 +122,14 @@ void SchoolGame::LoadContent()
     settings.students = options_.students;
     settings.maxFull = options_.maxFull;
     settings.badWeather = options_.badWeather;
-    sim_ = std::make_unique<School::SchoolSim>(plan_, *nav_, *layouts_, schedule, settings);
+    sim_ = std::make_unique<School::SchoolSim>(plan_, *nav_, *layouts_, schedule, settings, liftNav_.get());
     for (const std::string& problem : School::ValidateTimetable(plan_, sim_->Pop())) School::Log("timetable", "INVALID: %s", problem.c_str());
     sim_->FastForwardTo(options_.startTime.value_or(kDefaultStart));
     (void)sim_->TakeBells();   // bells rung while fast-forwarding are history, not news
     timeScale_ = std::max(0.0f, options_.timeScale);
     const double ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();
-    School::Log("main", "school built: %zu rooms, %zu doors, %zu people, clock %s (%.0f ms)", plan_.rooms.size(), plan_.doors.size(), sim_->Pop().npcs.size(),
-                School::ClockText(sim_->Time()).c_str(), ms);
+    School::Log("main", "school built: %zu rooms, %zu doors, %zu stairs, %zu elevators, %zu people, clock %s (%.0f ms)", plan_.rooms.size(), plan_.doors.size(), plan_.stairs.size(),
+                plan_.elevators.size(), sim_->Pop().npcs.size(), School::ClockText(sim_->Time()).c_str(), ms);
     services_.plan = &plan_;
     services_.nav = nav_.get();
     services_.layouts = layouts_.get();
@@ -353,6 +366,13 @@ void SchoolGame::HandleSystemKeys()
         if (input_.Pressed(Keys::D3)) SetTimeScale(5.0f);
         if (input_.Pressed(Keys::D4)) SetTimeScale(10.0f);
         if (input_.Pressed(Keys::D5)) SetTimeScale(30.0f);
+        if (input_.Pressed(Keys::OemComma) || input_.Pressed(Keys::OemPeriod)) {
+            const double delta = input_.Pressed(Keys::OemPeriod) ? 900.0 : -900.0;
+            sim_->JumpToTime(std::clamp(sim_->Time() + delta, 0.0, 86399.0));
+            (void)sim_->TakeBells();
+            lastPhase_ = sim_->PhaseIndex();
+            hud_->Toast("Clock set to " + School::ClockText(sim_->Time()), 1.5f);
+        }
         if (input_.Pressed(Keys::N)) {
             sim_->SkipToNextPhase(true);
             hud_->Toast("Skipped to " + PhaseLabel(sim_->Schedule(), sim_->PhaseIndex()) + " at " + School::ClockText(sim_->Time()), 2.5f);
@@ -481,7 +501,7 @@ void SchoolGame::UpdateInteractables()
         const Room& r = plan_.room(id);
         for (const School::DoorId did : r.doors) {
             const School::Door& d = plan_.door(did);
-            if (!d.Leaf() || School::DistanceSq(d.pos, p) > 8.0f * 8.0f) continue;
+            if (!d.Leaf() || d.kind == School::DoorKind::ElevatorDoor || School::DistanceSq(d.pos, p) > 8.0f * 8.0f) continue;
             const float y0 = plan_.FloorY(d.level);
             const bool alongX = d.sideOfA == School::Side::North || d.sideOfA == School::Side::South;
             const float hw = d.width * 0.5f;
@@ -554,6 +574,43 @@ void SchoolGame::UpdateInteractables()
             }
         }
     }
+    // Elevators: a call button beside every cab door on the corridor side, up and down buttons inside the cab.
+    for (int i = 0; i < sim_->ElevatorCount(); ++i) {
+        const School::ElevatorShaft& e = plan_.elevators[static_cast<std::size_t>(i)];
+        const School::Vec2 c = e.footprint.Center();
+        if (School::DistanceSq(c, p) > 10.0f * 10.0f) continue;
+        for (std::size_t k = 0; k < e.cab.size(); ++k) {
+            const int lvl = e.levelLow + static_cast<int>(k);
+            if (std::abs(lvl - level) > 1) continue;
+            const float y0 = plan_.FloorY(lvl);
+            for (const School::DoorId did : plan_.room(e.cab[k]).doors) {
+                const School::Door& d = plan_.door(did);
+                const School::Vec2 n = School::SideNormal(e.entrySide);   // out of the cab into the corridor
+                const School::Vec2 at = d.pos + n * 0.08f + n.RightHand() * (d.width * 0.5f + 0.35f);
+                Interactable it;
+                it.box = BoundingBox(Vector3(at.x - 0.1f, y0 + 1.0f, at.z - 0.1f), Vector3(at.x + 0.1f, y0 + 1.25f, at.z + 0.1f));
+                const School::ElevatorStatus st = sim_->Elevator(i);
+                it.prompt = st.level == lvl && st.doorOpen > 0.5f ? "Elevator is here" : "Call the elevator";
+                it.activate = [this, i, lvl] { sim_->CallElevator(i, lvl); };
+                interaction_.Add(std::move(it));
+            }
+        }
+        // the cab's own panel: one button up, one down, at the back wall of the cab wherever it is
+        const School::ElevatorStatus st = sim_->Elevator(i);
+        const School::Vec2 n = School::SideNormal(e.entrySide);
+        const School::Vec2 back = c - n * (std::max(e.footprint.Width(), e.footprint.Depth()) * 0.5f - 0.2f);
+        const School::Vec2 side = back + n.RightHand() * -0.9f;
+        for (int dir = -1; dir <= 1; dir += 2) {
+            const int target = st.level + dir;
+            if (target < e.levelLow || target > e.levelHigh) continue;
+            Interactable it;
+            const float y = st.y + (dir > 0 ? 1.35f : 1.1f);
+            it.box = BoundingBox(Vector3(side.x - 0.12f, y - 0.1f, side.z - 0.12f), Vector3(side.x + 0.12f, y + 0.1f, side.z + 0.12f));
+            it.prompt = dir > 0 ? "Elevator: up" : "Elevator: down";
+            it.activate = [this, i, target] { sim_->CallElevator(i, target); };
+            interaction_.Add(std::move(it));
+        }
+    }
     // Fire alarm points: beside every exit of the lobby.
     if (currentRoom_ == plan_.mainLobby) {
         const Room& lobby = plan_.room(plan_.mainLobby);
@@ -571,6 +628,36 @@ void SchoolGame::UpdateInteractables()
             interaction_.Add(std::move(it));
         }
     }
+}
+
+void SchoolGame::UpdateElevators()
+{
+    // Statuses for rendering, closed cab doors as collision, and the player's own ride.
+    elevators_.clear();
+    std::vector<BoundingBox> blockers;
+    const Vector3 feet = player_->Feet();
+    ridingShaft_ = -1;
+    for (int i = 0; i < sim_->ElevatorCount(); ++i) {
+        const School::ElevatorStatus st = sim_->Elevator(i);
+        elevators_.push_back(st);
+        const School::ElevatorShaft& e = plan_.elevators[static_cast<std::size_t>(i)];
+        for (std::size_t k = 0; k < e.cab.size(); ++k) {
+            const int level = e.levelLow + static_cast<int>(k);
+            const bool open = st.level == level && !st.moving && st.doorOpen > 0.6f;
+            if (open) continue;
+            for (const School::DoorId did : plan_.room(e.cab[k]).doors) {
+                const School::Door& d = plan_.door(did);
+                const float y0 = plan_.FloorY(level);
+                const bool alongX = d.sideOfA == School::Side::North || d.sideOfA == School::Side::South;
+                const float hw = d.width * 0.5f + 0.1f;
+                blockers.emplace_back(Vector3(d.pos.x - (alongX ? hw : 0.08f), y0 - 0.5f, d.pos.z - (alongX ? 0.08f : hw)), Vector3(d.pos.x + (alongX ? hw : 0.08f), y0 + School::kDoorHeight, d.pos.z + (alongX ? 0.08f : hw)));
+            }
+        }
+        // Standing in the shaft's footprint within reach of the cab floor: ride.
+        if (e.footprint.Contains(School::Vec2{feet.X, feet.Z}, 0.05f) && std::fabs(st.y - feet.Y) < 0.7f) ridingShaft_ = i;
+    }
+    collision_->SetDynamicBoxes(std::move(blockers));
+    player_->SetRide(ridingShaft_ >= 0, ridingShaft_ >= 0 ? elevators_[static_cast<std::size_t>(ridingShaft_)].y : 0.0f);
 }
 
 void SchoolGame::UpdateRoomBanner(float dt)
@@ -616,6 +703,7 @@ void SchoolGame::Update(GameTime& gameTime)
 
     if (!paused_) {
         time_ += dt;
+        UpdateElevators();
         if (!bigMap_) player_->Update(dt, camera_, *collision_, input_, true);
         UpdateRoomBanner(dt);
         StepSimulation(dt);
@@ -631,7 +719,7 @@ void SchoolGame::Update(GameTime& gameTime)
         if (currentRoom_ != School::kNone)
             for (const School::DoorId did : plan_.room(currentRoom_).doors) {
                 const School::Door& d = plan_.door(did);
-                if (d.Leaf() && School::DistanceSq(d.pos, School::Vec2{feet.X, feet.Z}) < 2.0f * 2.0f) sim_->RequestDoor(did, 1.5f);
+                if (d.Leaf() && d.kind != School::DoorKind::ElevatorDoor && School::DistanceSq(d.pos, School::Vec2{feet.X, feet.Z}) < 2.0f * 2.0f) sim_->RequestDoor(did, 1.5f);
             }
         interactScan_ += dt;
         if (interactScan_ >= 0.25f) {
@@ -676,12 +764,12 @@ std::vector<std::string> SchoolGame::StatsLines() const
     std::snprintf(buf, sizeof buf, "triangles %d  draw calls %d  textures %d  voices %d  loops %d  particles %d  screens/frame %d  cctv %s", stats_.trianglesDrawn, stats_.drawCalls,
                   stats_.textures, stats_.activeVoices, schoolAudio_->ActiveLoops(), stats_.particles, stats_.screensRendered, screens_->CctvActive() ? "on" : "off");
     out.emplace_back(buf);
-    std::snprintf(buf, sizeof buf, "paths %d  events %lld  door passes %lld  unstuck %lld  unreachable %d  late %.0f  stuck now %d", ss.pathBuilds, ss.events, ss.doorPasses, ss.unstuck,
-                  ss.unreachable, ss.lateArrivals, sim_->StuckSuspects());
+    std::snprintf(buf, sizeof buf, "paths %d  events %lld  door passes %lld  rides %lld  unstuck %lld  unreachable %d  late %.0f  stuck now %d", ss.pathBuilds, ss.events, ss.doorPasses,
+                  ss.elevatorRides, ss.unstuck, ss.unreachable, ss.lateArrivals, sim_->StuckSuspects());
     out.emplace_back(buf);
     const Vector3 f = player_->Feet();
-    std::snprintf(buf, sizeof buf, "player %.1f %.1f %.1f  level %d  room %s  nav trees %d", static_cast<double>(f.X), static_cast<double>(f.Y), static_cast<double>(f.Z), player_->Level(),
-                  currentRoom_ == School::kNone ? "-" : plan_.room(currentRoom_).code.c_str(), nav_->TreesBuilt());
+    std::snprintf(buf, sizeof buf, "player %.1f %.1f %.1f  level %d  room %s  nav trees %d  rss %ld MB", static_cast<double>(f.X), static_cast<double>(f.Y), static_cast<double>(f.Z), player_->Level(),
+                  currentRoom_ == School::kNone ? "-" : plan_.room(currentRoom_).code.c_str(), nav_->TreesBuilt(), ResidentMegabytes());
     out.emplace_back(buf);
     if (sim_->Drill().active) {
         std::snprintf(buf, sizeof buf, "DRILL: %d of %d assembled, %.0f s", sim_->Drill().assembled, sim_->Drill().total, sim_->Time() - sim_->Drill().startedAt);
@@ -792,7 +880,7 @@ void SchoolGame::Draw(const GameTime& gameTime)
     effects_->World().setFogEnabledProperty(false);
     stage("sky", [&] { sky_->Draw(ctx); });
     effects_->World().setFogEnabledProperty(true);
-    stage("world", [&] { world_->Draw(ctx, light, sim_->Doors()); });
+    stage("world", [&] { world_->Draw(ctx, light, sim_->Doors(), elevators_); });
     stage("people", [&] { npcs_->Draw(ctx, *sim_, *world_, npcStats_); });
     stage("screens", [&] { screens_->Draw(ctx, *sim_, *world_); });
     stage("room effects", [&] { roomEffects_->Draw(ctx); });
@@ -832,8 +920,9 @@ void SchoolGame::Draw(const GameTime& gameTime)
             const int people = sim_->OccupantsOf(bannerRoom_);
             if (lesson.valid) {
                 const School::ClassGroup& g = sim_->Pop().classes[static_cast<std::size_t>(lesson.classId)];
+                static const char* kStates[] = {"empty", "arriving", "lesson in progress", "lesson ending", "busy"};
                 hud.roomSubtitle = std::string(School::SubjectName(lesson.subject)) + ", class " + g.name + (lesson.teacher >= 0 ? ", " + sim_->Pop().npcs[static_cast<std::size_t>(lesson.teacher)].name : "") +
-                                   "  (" + std::to_string(people) + " people)";
+                                   "  (" + std::to_string(people) + " people, " + kStates[static_cast<int>(sim_->StateOf(bannerRoom_))] + ")";
             } else {
                 hud.roomSubtitle = plan_.wings[static_cast<std::size_t>(r.wing)].name + "  (" + std::to_string(people) + " people)";
             }

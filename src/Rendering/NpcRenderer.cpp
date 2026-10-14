@@ -318,6 +318,8 @@ void NpcRenderer::Draw(const DrawContext& ctx, const School::SchoolSim& sim, con
         const float d2 = Vector3::DistanceSquared(pos, eye);
         if (d2 > far2) continue;
         if (room != School::kNone && !world.IsLoaded(room)) continue;
+        // Inside a cab, only full-fidelity riders are at the cab's real height; the others are behind closed doors.
+        if (room != School::kNone && plan.room(room).type == School::RoomType::ElevatorCab && a.fidelity != School::Fidelity::Full) continue;
         if (!ctx.view.frustum.Intersects(BoundingSphere(pos + Vector3(0, 0.9f, 0), 1.1f))) continue;
         Figure f;
         f.pos = pos;
