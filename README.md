@@ -17,7 +17,7 @@ scheduling experiment.
 | ![Cafeteria](docs/images/cafeteria.jpg) Lunch, first wave | ![Physics lab](docs/images/physics-lab.jpg) Physics: pendulum and board | ![Computer lab](docs/images/computer-lab.jpg) Computer lab with live desktops |
 | ![CCTV](docs/images/cctv.jpg) The security office's CCTV wall | ![Library](docs/images/library.jpg) The library | ![Gym](docs/images/gym.jpg) The gymnasium |
 | ![Auditorium](docs/images/auditorium.jpg) The auditorium | ![Fire drill](docs/images/fire-drill.jpg) Fire drill: walking to the assembly points | ![Rain](docs/images/rain.jpg) Rain in the courtyard |
-| ![Map](docs/images/campus-map.jpg) The campus map | ![Stairs](docs/images/stairs.jpg) A stairwell at the bell | ![Night](docs/images/night.jpg) The entrance at night |
+| ![Map](docs/images/campus-map.jpg) The campus map | ![Lobby](docs/images/lobby.jpg) The main lobby | ![Night](docs/images/night.jpg) The entrance at night |
 
 ## What is there
 
@@ -54,18 +54,19 @@ build/bin/cna-school-simulator --help
 ```
 
 Controls: `W A S D` walk, mouse look, `Shift` run, `E` / click use, `Esc` pause, `F1` help, `F3` statistics,
-`F4` debug overlays, `Tab` map, `M` minimap, `Space` stop the clock, `1`..`5` time x1 x2 x5 x10 x30, `N` next lesson,
+`F4` debug overlays, `F6` free flight, `Tab` map, `M` minimap, `Space` stop the clock, `1`..`5` time x1 x2 x5 x10 x30, `N` next lesson,
 `B` bell, `F` fire drill, `P` announcement, `O` weather, `,` `.` fifteen minutes back or on, `R` back to the entrance, `F11` fullscreen, `F2` mute.
 Elevators: `E` on the call button beside the door, step in, `E` on the panel's up or down button. Light switches
 beside the doors inside rooms switch a room's lights off, on, or back to automatic (they follow occupancy and daylight).
+Look at a person to see who they are and where they are going; `E` tells you more.
 A gamepad works too (left stick walk, right stick look, A use, Start pause, Y map).
 
 On a Wayland desktop with a CNA older than 2026-10-14 the window cannot be centred and the game refuses to start;
 run it under XWayland with `SDL_VIDEO_DRIVER=x11 build/bin/cna-school-simulator`.
 
 Headless (no display): `xvfb-run -a -s "-screen 0 1280x720x24" build/bin/cna-school-simulator --no-audio --script "..."`.
-The script language (`goto:`, `busiest:`, `time:`, `speed:`, `drill`, `shot:`, `stats`, `quit`, ...) is documented at
-`SchoolGame::RunScript` in `src/App/SchoolGame.cpp`; `tools/tour.sh` uses it to photograph every key place.
+The script language (`goto:`, `busiest:`, `time:`, `speed:`, `drill`, `shot:`, `stats`, `quit`, ...) is documented in
+`docs/SCRIPTING.md`; `tools/tour.sh` uses it to photograph every key place.
 
 ## Headless simulation
 
@@ -97,7 +98,7 @@ src/UI/           HUD, minimap, fonts
 Content/          generated textures, sounds, fonts, the schedule file
 tests/            school_tests
 tools/            build, tour, check_all, asset generators
-docs/             architecture, layout, simulation, schedule, renderer testing, known issues, CNA coverage
+docs/             architecture, layout, simulation, schedule, scripting, performance, renderer testing, known issues, CNA coverage
 ```
 
 The simulation half (`school_sim`) never includes CNA and is unit-tested without a window; the application

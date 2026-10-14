@@ -132,6 +132,17 @@ void PlayerController::Update(float dt, FirstPersonCamera& camera, const Collisi
                         (pad.getIsConnectedProperty() && pad.getButtonsProperty().getLeftStickProperty() == ButtonState::Pressed);
     const float speed = settings_.walkSpeed * (sprint ? settings_.sprintMultiplier : 1.0f);
 
+    if (flying_) {
+        // Free flight for inspection: along the view direction, three times walking speed, nothing in the way.
+        const Vector3 fly = camera.Forward() * forward + camera.Right() * strafe;
+        const Vector3 eye = camera.Position() + fly * (speed * 3.0f * dt);
+        feet_ = Vector3(eye.X, eye.Y - settings_.eyeHeight, eye.Z);
+        groundY_ = feet_.Y;
+        level_ = plan_.LevelAt(feet_.Y);
+        moving_ = fly.LengthSquared() > 1e-4f;
+        camera.SetPosition(eye);
+        return;
+    }
     const Vector3 wish = camera.GroundForward() * forward + camera.Right() * strafe;
     const Vector3 velocity = wish * speed;
     moving_ = wish.LengthSquared() > 1e-4f;

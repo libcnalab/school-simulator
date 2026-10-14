@@ -40,6 +40,9 @@ public:
         rideY_ = y;
     }
     [[nodiscard]] bool Riding() const { return riding_; }
+    /** Debug: no collision and no ground; W flies where the camera looks. */
+    void SetFlying(bool flying) { flying_ = flying; }
+    [[nodiscard]] bool Flying() const { return flying_; }
 
     /** Walk and look for one frame. `mouseLook` is false while the pointer is released (menus). */
     void Update(float dt, FirstPersonCamera& camera, const CollisionWorld& collision, const InputState& input, bool mouseLook);
@@ -70,6 +73,7 @@ private:
     int level_ = 1;
     bool riding_ = false;
     float rideY_ = 0.0f;
+    bool flying_ = false;
     bool captured_ = false;
     bool relativeMode_ = false;
     bool pointerUnavailable_ = false;   // the platform cannot re-centre the pointer (no window): mouse look off

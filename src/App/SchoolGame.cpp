@@ -331,6 +331,16 @@ void SchoolGame::HandleSystemKeys()
     }
     if (input_.Pressed(Keys::F1) || input_.Pressed(Keys::H)) showHelp_ = !showHelp_;
     if (input_.Pressed(Keys::F3)) showStats_ = !showStats_;
+    if (input_.Pressed(Keys::F6)) {
+        player_->SetFlying(!player_->Flying());
+        if (!player_->Flying()) {
+            // Back on the ground: drop to the floor under the camera.
+            const Vector3 f = player_->Feet();
+            const float ground = plan_.GroundHeight(School::Vec2{f.X, f.Z}, f.Y);
+            player_->Place(Vector3(f.X, ground, f.Z), camera_.Yaw(), camera_.Pitch(), camera_);
+        }
+        hud_->Toast(player_->Flying() ? "Free flight (debug): W flies where you look" : "Back on the ground", 2.0f);
+    }
     if (input_.Pressed(Keys::F4)) {
         debugMode_ = (debugMode_ + 1) % 4;
         static const char* names[] = {"Debug overlays off", "Debug: NPC paths and fidelity", "Debug: room bounds and navigation nodes", "Debug: collision boxes"};
@@ -610,6 +620,51 @@ void SchoolGame::UpdateInteractables()
             }
         }
     }
+    // People within a few metres: look at somebody to learn who they are and what they are doing.
+    {
+        const School::Population& pop = sim_->Pop();
+        int added = 0;
+        for (const School::Npc& n : pop.npcs) {
+            const School::Agent& a = sim_->AgentOf(n.id);
+            if (a.mode == School::Mode::Offsite) continue;
+            School::Vec3 pos;
+            float yaw;
+            RoomId room;
+            sim_->Observe(n.id, pos, yaw, room);
+            if (std::fabs(pos.y - feet.Y) > 2.5f || School::DistanceSq(School::Vec2{pos.x, pos.z}, p) > 5.0f * 5.0f) continue;
+            Interactable it;
+            it.box = BoundingBox(Vector3(pos.x - 0.25f, pos.y + 0.2f, pos.z - 0.25f), Vector3(pos.x + 0.25f, pos.y + 1.75f, pos.z + 0.25f));
+            std::string who = n.name + ", " + School::RoleName(n.role);
+            if (n.role == School::Role::Student && n.classId >= 0) who += " " + pop.classes[static_cast<std::size_t>(n.classId)].name;
+            else if (n.role == School::Role::Teacher) who += std::string(" of ") + School::SubjectName(n.subject);
+            std::string doing = School::ActivityName(a.activity);
+            if (a.mode == School::Mode::Transit && a.goal.room != School::kNone) doing += " to " + plan_.room(a.goal.room).name;
+            it.prompt = who + ": " + doing;
+            const int id = n.id;
+            it.activate = [this, id] {
+                const School::Npc& npc = sim_->Pop().npcs[static_cast<std::size_t>(id)];
+                const School::Agent& ag = sim_->AgentOf(id);
+                std::string text = npc.name + " (" + School::RoleName(npc.role) + ")";
+                if (npc.role == School::Role::Student && npc.classId >= 0) {
+                    const School::ClassGroup& g = sim_->Pop().classes[static_cast<std::size_t>(npc.classId)];
+                    text += ", class " + g.name + ", home room " + plan_.room(g.home).code;
+                    const School::Phase& ph = sim_->Schedule().At(sim_->PhaseIndex());
+                    const int period = ph.lesson > 0 ? ph.lesson : 1;
+                    if (period <= sim_->Pop().periods) {
+                        const School::Lesson& l = g.timetable[static_cast<std::size_t>(sim_->Weekday())][static_cast<std::size_t>(period - 1)];
+                        text += std::string("; lesson ") + std::to_string(period) + ": " + (l.free ? "self-study" : School::SubjectName(l.subject)) + " in " + plan_.room(l.free ? g.home : l.room).code;
+                    }
+                } else if (npc.base != School::kNone) {
+                    text += ", works in " + plan_.room(npc.base).name;
+                }
+                if (npc.usesElevator) text += "; takes the lift";
+                text += "; now " + std::string(School::ActivityName(ag.activity));
+                hud_->Toast(text, 5.0f);
+            };
+            interaction_.Add(std::move(it));
+            if (++added >= 40) break;
+        }
+    }
     // Elevators: a call button beside every cab door on the corridor side, up and down buttons inside the cab.
     for (int i = 0; i < sim_->ElevatorCount(); ++i) {
         const School::ElevatorShaft& e = plan_.elevators[static_cast<std::size_t>(i)];
@@ -791,8 +846,8 @@ std::vector<std::string> SchoolGame::StatsLines() const
     std::snprintf(buf, sizeof buf, "sim %.2f ms  clock %s  day %d  %s  x%g  digest %016llx", static_cast<double>(stats_.simMilliseconds), School::ClockText(sim_->Time(), true).c_str(),
                   sim_->Day() + 1, PhaseLabel(sim_->Schedule(), sim_->PhaseIndex()).c_str(), static_cast<double>(timePaused_ ? 0.0f : timeScale_), static_cast<unsigned long long>(sim_->Digest()));
     out.emplace_back(buf);
-    std::snprintf(buf, sizeof buf, "people %d  on campus %d  walking %d  full %d  drawn %d (%d detailed)", stats_.npcTotal, stats_.npcOnCampus, stats_.npcWalking, stats_.npcFull, stats_.npcDrawn,
-                  stats_.npcDrawnDetailed);
+    std::snprintf(buf, sizeof buf, "people %d  on campus %d  walking %d (full %d, reduced %d, abstract %d)  drawn %d (%d detailed)", stats_.npcTotal, stats_.npcOnCampus, stats_.npcWalking,
+                  stats_.npcFull, ss.reduced, ss.abstract, stats_.npcDrawn, stats_.npcDrawnDetailed);
     out.emplace_back(buf);
     std::snprintf(buf, sizeof buf, "rooms loaded %d  drawn %d  built %d  build %.1f ms  doors %d", stats_.roomsLoaded, stats_.roomsDrawn, stats_.roomsBuiltTotal,
                   static_cast<double>(stats_.buildMilliseconds), stats_.doorsDrawn);

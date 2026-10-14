@@ -429,6 +429,15 @@ void SchoolSim::UpdateFidelity()
         }
     }
     std::sort(want.begin(), want.end(), [](const Candidate& x, const Candidate& y) { return x.score < y.score; });
+    stats_.transit = 0;
+    stats_.reduced = 0;
+    stats_.abstract = 0;
+    for (const Agent& a : agents_)
+        if (a.mode == Mode::Transit) {
+            ++stats_.transit;
+            if (a.fidelity == Fidelity::Reduced) ++stats_.reduced;
+            else if (a.fidelity == Fidelity::Abstract) ++stats_.abstract;
+        }
     for (std::size_t k = 0; k < want.size(); ++k) {
         const int id = want[k].npc;
         if (static_cast<int>(k) < settings_.maxFull) {
