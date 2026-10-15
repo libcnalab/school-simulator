@@ -43,6 +43,32 @@
       progress.hidden = true;
     });
 
+    // Mouse look wants the mouse's raw movement, as the desktop build gets it. A plain pointer lock reports the movement
+    // after the operating system's pointer acceleration, which damps slow movements: the view turns heavily. SDL asks for
+    // the lock without options, so ask for unadjusted movement here and fall back to the plain lock where the browser
+    // does not offer it (Firefox ignores the option, older Chrome versions reject it).
+    (function () {
+      const request = Element.prototype.requestPointerLock;
+      if (!request) return;
+      Element.prototype.requestPointerLock = function (options) {
+        const element = this;
+        const merged = Object.assign({ unadjustedMovement: true }, options);
+        let result;
+        try {
+          result = request.call(element, merged);
+        } catch (error) {
+          return request.call(element, options);
+        }
+        if (result && typeof result.catch === 'function') {
+          return result.catch(function (error) {
+            if (error && error.name === 'NotSupportedError') return request.call(element, options);
+            throw error;
+          });
+        }
+        return result;
+      };
+    })();
+
     function setStatus(message) {
       if (!message) { loading.hidden = true; return; }
       loading.hidden = false;

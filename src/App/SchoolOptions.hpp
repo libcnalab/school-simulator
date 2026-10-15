@@ -20,6 +20,7 @@ struct SchoolOptions {
     std::string screenshotPath;         // written after `screenshotFrame`, then exits
     int screenshotFrame = 10;
     std::string script;                 // semicolon-separated test actions, see SchoolGame::RunScript
+    float hitchMs = 0.0f;               // >0: log every frame that took longer than this (milliseconds), with a breakdown
     float fixedTimeStep = 0.0f;         // >0: advance by this many seconds per frame (deterministic runs)
 
     // the simulation

@@ -162,6 +162,7 @@ void SchoolGame::LoadContent()
     weather_ = std::make_unique<Weather>(services_);
     weather_->SetKind(options_.weather);
     screens_ = std::make_unique<Screens>(services_, plan_, *layouts_);
+    screens_->Prepare();
     roomEffects_ = std::make_unique<RoomEffects>(services_, plan_, *layouts_);
     collision_ = std::make_unique<CollisionWorld>(plan_, *layouts_);
     gizmos_ = std::make_unique<Gizmos>(services_);
@@ -782,11 +783,19 @@ void SchoolGame::Update(GameTime& gameTime)
         return;
     }
     Game::Update(gameTime);
+    const Clock::time_point updateStart = Clock::now();
+    if (options_.hitchMs > 0.0f) {
+        frameGapMs_ = haveFrameStart_ ? std::chrono::duration<double, std::milli>(updateStart - frameStart_).count() : 0.0;
+        frameStart_ = updateStart;
+        haveFrameStart_ = true;
+        frameNotes_.clear();
+    }
     float dt = static_cast<float>(gameTime.getElapsedGameTimeProperty().getTotalMillisecondsProperty()) / 1000.0f;
     dt = std::clamp(dt, 0.0f, kMaxFrameSeconds);
     if (options_.fixedTimeStep > 0.0f) dt = options_.fixedTimeStep;
     ++frame_;
     input_.Update();
+    NoteFrameTime("input", updateStart);
     UpdateFrameStats(dt);
     HandleSystemKeys();
     const bool active = getIsActiveProperty();
@@ -797,11 +806,19 @@ void SchoolGame::Update(GameTime& gameTime)
     if (!paused_) {
         time_ += dt;
         UpdateElevators();
+        Clock::time_point mark = Clock::now();
         if (!bigMap_) player_->Update(dt, camera_, *collision_, input_, true);
         UpdateRoomBanner(dt);
+        NoteFrameTime("player", mark);
+        mark = Clock::now();
         StepSimulation(dt);
+        NoteFrameTime("sim", mark);
+        mark = Clock::now();
         screens_->Update(dt, camera_.Position(), *sim_);
+        NoteFrameTime("screens", mark);
+        mark = Clock::now();
         world_->Update(camera_.Position(), player_->Level(), dt, screens_->Anchors());
+        NoteFrameTime("world", mark);
         {
             const bool out = currentRoom_ == School::kNone || !plan_.room(currentRoom_).Indoor();
             weather_->Update(dt, camera_.Position(), out, player_->Feet().Y);
@@ -831,9 +848,21 @@ void SchoolGame::Update(GameTime& gameTime)
         const bool outdoors = currentRoom_ == School::kNone || !plan_.room(currentRoom_).Indoor();
         schoolAudio_->Update(dt, camera_.Position(), camera_.Forward(), *sim_, *world_, currentRoom_, outdoors);
     }
+    const Clock::time_point audioStart = Clock::now();
     audio_->Update();
     hud_->Update(dt);
+    NoteFrameTime("audio", audioStart);
     if (options_.maxFrames > 0 && frame_ >= options_.maxFrames) Exit();
+}
+
+void SchoolGame::NoteFrameTime(const char* what, Clock::time_point since)
+{
+    if (options_.hitchMs <= 0.0f) return;
+    const double ms = std::chrono::duration<double, std::milli>(Clock::now() - since).count();
+    if (ms < 1.0) return;
+    char buf[64];
+    std::snprintf(buf, sizeof buf, " %s %.1f", what, ms);
+    frameNotes_ += buf;
 }
 
 // --- drawing ----------------------------------------------------------------------------------------------------------------------
@@ -982,7 +1011,15 @@ void SchoolGame::Draw(const GameTime& gameTime)
         fx->setFogEndProperty(foggy ? 55.0f : kFarPlane);
     }
 
+    const Clock::time_point drawStart = Clock::now();
     const auto stage = [&](const char* name, auto&& fn) {
+        const Clock::time_point stageStart = Clock::now();
+        struct Noter {
+            SchoolGame* game;
+            const char* name;
+            Clock::time_point start;
+            ~Noter() { game->NoteFrameTime(name, start); }
+        } noter{this, name, stageStart};
         try {
             fn();
         } catch (const std::exception& e) {
@@ -1069,6 +1106,13 @@ void SchoolGame::Draw(const GameTime& gameTime)
         });
     }
     services_.mainView = nullptr;
+    if (options_.hitchMs > 0.0f && haveFrameStart_) {
+        const double drawMs = std::chrono::duration<double, std::milli>(Clock::now() - drawStart).count();
+        const double workMs = std::chrono::duration<double, std::milli>(Clock::now() - frameStart_).count();
+        // The gap since the previous frame's start is what the player felt; the work is what this process spent in it.
+        if (frameGapMs_ > static_cast<double>(options_.hitchMs) || workMs > static_cast<double>(options_.hitchMs))
+            School::Log("hitch", "frame %d: %.0f ms since the last frame, %.0f ms of work (draw %.0f) |%s", frame_, frameGapMs_, workMs, drawMs, frameNotes_.c_str());
+    }
 
     if (!pendingShot_.empty()) {
         SaveScreenshot(pendingShot_);

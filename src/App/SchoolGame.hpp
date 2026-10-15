@@ -3,6 +3,7 @@
 // The application: a CNA Game that owns the plan, the simulation, the player, the renderers, audio and HUD.
 // Update and Draw orchestrate; every subsystem does its own work.
 
+#include <chrono>
 #include <memory>
 #include <set>
 #include <string>
@@ -105,6 +106,14 @@ private:
     std::unique_ptr<PlayerController> player_;
     InputState input_;
     std::string rendererName_;
+
+    // --hitch-log: where the time of the current frame went (milliseconds), logged when the frame is slow
+    using Clock = std::chrono::steady_clock;
+    Clock::time_point frameStart_{};
+    bool haveFrameStart_ = false;
+    double frameGapMs_ = 0.0;
+    std::string frameNotes_;
+    void NoteFrameTime(const char* what, Clock::time_point since);
 
     // state
     double time_ = 0.0;            // real seconds since start

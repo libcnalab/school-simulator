@@ -11,7 +11,7 @@ tools/web_smoke.sh            # headless Chrome: load, click, walk, F3, busy caf
 ```
 
 Needs the Emscripten SDK (`$EMSDK`, default `~/emsdk`). The tree is `build-consumer/` (the shared tree for standalone
-consumers; the native `build/` and `build-probe/` are untouched), the ccache is the shared one, 3 jobs. Any static web
+consumers; the native `build/` and `build-probe/` are untouched), the ccache is the shared one, 2 jobs. Any static web
 server works if it sends `.wasm` as `application/wasm`; no threads and no `SharedArrayBuffer`, so no special headers.
 
 ## What the build does
@@ -41,6 +41,29 @@ shown by F3 in the lobby and in the busy cafeteria (525 people in the room, 413 
 captures with a click (pointer lock), WASD walks, F3 shows the statistics, no JavaScript error but the one below.
 Not verified: a real GPU in a desktop browser, other browsers (Firefox, Safari), touch devices, audio output (the
 page needs a first click before browsers start audio; the mixer starts without error).
+
+## Smooth look and frame pacing (2026-10-15)
+
+Reported on a desktop browser: the view turned heavily compared with the desktop build, and the game stalled now and then.
+Three causes, all fixed:
+
+- **CNA's browser main loop ignored `IsFixedTimeStep = false`.** It always ran fixed 1/60 s Updates from an accumulator, so every
+  `requestAnimationFrame` produced zero, one or several Updates (frame times jitter around the display period): uneven pacing and
+  mouse input, and after any slow frame a burst of catch-up Updates that made the next frame slower. `Game::EmscriptenMainLoopCallback`
+  now does one Update with the real elapsed time and one Draw per frame when the game asks for a variable step (the fixed-step
+  path is unchanged).
+- **Pointer lock reported accelerated movement.** A plain pointer lock delivers the movement after the operating system's pointer
+  acceleration, which damps slow motion; the desktop build gets raw motion. `web/shell.html` makes every `requestPointerLock()` ask
+  for `unadjustedMovement` (falls back to the plain lock where the browser does not offer it, e.g. Firefox). CNA also stopped
+  throwing away the fractional part of relative mouse motion (`Sdl3Mouse::ConsumeRelativeDelta`), which mattered for slow movement
+  on scaled displays.
+- **Door plates were rendered the first time they were seen**, each into its own render target in the middle of the frame (a
+  render-target switch per plate; a new corridor meant a dozen of them in one frame, 60-300 ms each under software WebGL). They are
+  packed into 2048x2048 atlases (10 x 32 plates) rendered once at start (`Screens::Prepare`, with the whiteboards and wing signs),
+  and drawn with a sub-rectangle of the atlas.
+
+`--hitch-log MS` (or `?arg=--hitch-log=50`) logs every frame longer than MS with where the time went (input, player, sim,
+screens, world, offscreen, sky, people, ...), for hunting stutter on a real GPU.
 
 ## Known limits
 

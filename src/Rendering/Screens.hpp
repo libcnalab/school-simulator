@@ -41,6 +41,12 @@ public:
     /** Renders one camera view and refreshes the signage. Call before the back buffer is cleared. */
     void RenderOffscreen(Microsoft::Xna::Framework::Graphics::GraphicsDevice& device, EffectBank& fx, SkyDome& sky, WorldRenderer& world, NpcRenderer& npcs,
                          const School::SchoolSim& sim, const WorldLighting& light, double time);
+    /**
+     * Renders the pictures that never change (door plates, whiteboards, wing signs) once, up front. Rendering one the first
+     * time it is seen costs a render-target switch in the middle of a frame, which a browser's WebGL pays for dearly:
+     * a corridor of new plates was a visible stall.
+     */
+    void Prepare();
     /** Draws the screen quads in the world (CCTV wall, signage, whiteboards). */
     void Draw(const DrawContext& ctx, const School::SchoolSim& sim, const WorldRenderer& world);
 
@@ -51,11 +57,14 @@ private:
         Microsoft::Xna::Framework::Vector3 centre, right, up;   // half extents along the panel axes
         Microsoft::Xna::Framework::Graphics::Texture2D* texture = nullptr;
         float emissive = 1.0f;
+        float u0 = 0.0f, v0 = 0.0f, u1 = 1.0f, v1 = 1.0f;   // the part of the texture shown (door plates share atlases)
     };
     void DrawQuads(const DrawContext& ctx, const std::vector<Quad>& quads);
     void RenderSignage(Microsoft::Xna::Framework::Graphics::GraphicsDevice& device, const School::SchoolSim& sim);
     Microsoft::Xna::Framework::Graphics::Texture2D* BoardFor(School::Subject subject);
-    Microsoft::Xna::Framework::Graphics::Texture2D* PlateFor(School::RoomId room);
+    /** The atlas texture and the rectangle (in 0..1) of a room's door plate; false when the room has none. */
+    bool PlateFor(School::RoomId room, Quad& quad);
+    void BuildPlateAtlases();
 
     Services& s_;
     const School::SchoolPlan& plan_;
@@ -104,7 +113,12 @@ private:
     float signageAge_ = 10.0f;
     bool signageNear_ = false;
     std::map<int, std::unique_ptr<Microsoft::Xna::Framework::Graphics::RenderTarget2D>> boards_;
-    std::map<int, std::unique_ptr<Microsoft::Xna::Framework::Graphics::RenderTarget2D>> plates_;   // door plates by room
+    struct PlateSlot {
+        int atlas = -1;
+        float u0 = 0, v0 = 0, u1 = 1, v1 = 1;
+    };
+    std::vector<std::unique_ptr<Microsoft::Xna::Framework::Graphics::RenderTarget2D>> plateAtlases_;
+    std::map<int, PlateSlot> plates_;   // door plates by room
     std::map<int, std::unique_ptr<Microsoft::Xna::Framework::Graphics::RenderTarget2D>> wingSigns_;   // by wing * 16 + level
     Microsoft::Xna::Framework::Graphics::Texture2D* WingSignFor(int wing, int level);
     std::vector<Microsoft::Xna::Framework::Graphics::VertexPositionColorTexture> scratch_;

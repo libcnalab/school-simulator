@@ -300,32 +300,87 @@ Texture2D* Screens::BoardFor(School::Subject subject)
     return ptr;
 }
 
-Texture2D* Screens::PlateFor(School::RoomId room)
+namespace {
+constexpr int kPlateW = 192, kPlateH = 64;
+constexpr int kAtlasSize = 2048;   // 10 x 32 plates per atlas; WebGL 2 guarantees textures of this size
+}  // namespace
+
+bool Screens::PlateFor(School::RoomId room, Quad& quad)
 {
-    auto it = plates_.find(room);
-    if (it != plates_.end()) return it->second.get();
-    if (s_.font == nullptr) return nullptr;
-    const Room& r = plan_.room(room);
-    auto rt = std::make_unique<RenderTarget2D>(*s_.device, 192, 64, false, SurfaceFormat::Color, DepthFormat::None, 0, RenderTargetUsage::PreserveContents);
-    GraphicsDevice& device = *s_.device;
-    device.SetRenderTarget(rt.get());
-    const School::Wing& w = plan_.wings[static_cast<std::size_t>(r.wing)];
-    device.Clear(Color(static_cast<int>(w.accent[0] * 200.0f), static_cast<int>(w.accent[1] * 200.0f), static_cast<int>(w.accent[2] * 200.0f), 255));
-    const SamplerState sampler = SamplerState::LinearClamp;
-    s_.sprites->Begin(SpriteSortMode::Deferred, &BlendState::NonPremultiplied, &sampler, nullptr, nullptr);
-    s_.sprites->Draw(*s_.textures->White(), Rectangle(4, 4, 184, 56), Color(250, 250, 248, 255));
-    s_.sprites->DrawString(*s_.font, r.code, Vector2(12, 4), Color(20, 24, 40, 255), 0.0f, Vector2(0, 0), 1.05f, SpriteEffects::None, 0.0f);
-    std::string type = School::TypeName(r.type);
-    if (r.name.rfind(type, 0) != 0) {   // a named room ("Main lobby S0.41"): show the name without the code
-        type = r.name.substr(0, r.name.size() > r.code.size() + 1 ? r.name.size() - r.code.size() - 1 : r.name.size());
+    const auto it = plates_.find(room);
+    if (it == plates_.end() || it->second.atlas < 0) return false;
+    quad.texture = plateAtlases_[static_cast<std::size_t>(it->second.atlas)].get();
+    quad.u0 = it->second.u0;
+    quad.v0 = it->second.v0;
+    quad.u1 = it->second.u1;
+    quad.v1 = it->second.v1;
+    return true;
+}
+
+void Screens::BuildPlateAtlases()
+{
+    if (s_.font == nullptr || !plateAtlases_.empty()) return;
+    // A plate hangs beside every door that opens from a room into a corridor (see Draw).
+    std::vector<School::RoomId> ids;
+    for (const Room& r : plan_.rooms) {
+        if (!r.Indoor() || School::Info(r.type).circulation) continue;
+        for (const School::DoorId did : r.doors) {
+            const School::Door& d = plan_.door(did);
+            if (d.kind == School::DoorKind::Opening) continue;
+            const Room& other = plan_.room(d.Other(r.id));
+            if (School::Info(other.type).circulation && other.Indoor()) {
+                ids.push_back(r.id);
+                break;
+            }
+        }
     }
-    s_.sprites->DrawString(*s_.font, type, Vector2(12, 36), Color(60, 64, 80, 255), 0.0f, Vector2(0, 0), 0.55f, SpriteEffects::None, 0.0f);
-    s_.sprites->End();
-    device.SetRenderTarget(nullptr);
-    Texture2D* ptr = rt.get();
-    plates_[room] = std::move(rt);
-    ++rendered_;
-    return ptr;
+    const int cols = kAtlasSize / kPlateW, rows = kAtlasSize / kPlateH, perAtlas = cols * rows;
+    GraphicsDevice& device = *s_.device;
+    const SamplerState sampler = SamplerState::LinearClamp;
+    for (std::size_t first = 0; first < ids.size(); first += static_cast<std::size_t>(perAtlas)) {
+        auto rt = std::make_unique<RenderTarget2D>(device, kAtlasSize, kAtlasSize, false, SurfaceFormat::Color, DepthFormat::None, 0, RenderTargetUsage::PreserveContents);
+        device.SetRenderTarget(rt.get());
+        device.Clear(Color(255, 255, 255, 255));
+        s_.sprites->Begin(SpriteSortMode::Deferred, &BlendState::NonPremultiplied, &sampler, nullptr, nullptr);
+        const int atlas = static_cast<int>(plateAtlases_.size());
+        const std::size_t last = std::min(ids.size(), first + static_cast<std::size_t>(perAtlas));
+        for (std::size_t i = first; i < last; ++i) {
+            const Room& r = plan_.room(ids[i]);
+            const int slot = static_cast<int>(i - first);
+            const int x = (slot % cols) * kPlateW, y = (slot / cols) * kPlateH;
+            const School::Wing& w = plan_.wings[static_cast<std::size_t>(r.wing)];
+            s_.sprites->Draw(*s_.textures->White(), Rectangle(x, y, kPlateW, kPlateH),
+                             Color(static_cast<int>(w.accent[0] * 200.0f), static_cast<int>(w.accent[1] * 200.0f), static_cast<int>(w.accent[2] * 200.0f), 255));
+            s_.sprites->Draw(*s_.textures->White(), Rectangle(x + 4, y + 4, 184, 56), Color(250, 250, 248, 255));
+            s_.sprites->DrawString(*s_.font, r.code, Vector2(static_cast<float>(x + 12), static_cast<float>(y + 4)), Color(20, 24, 40, 255), 0.0f, Vector2(0, 0), 1.05f, SpriteEffects::None, 0.0f);
+            std::string type = School::TypeName(r.type);
+            if (r.name.rfind(type, 0) != 0) {   // a named room ("Main lobby S0.41"): show the name without the code
+                type = r.name.substr(0, r.name.size() > r.code.size() + 1 ? r.name.size() - r.code.size() - 1 : r.name.size());
+            }
+            s_.sprites->DrawString(*s_.font, type, Vector2(static_cast<float>(x + 12), static_cast<float>(y + 36)), Color(60, 64, 80, 255), 0.0f, Vector2(0, 0), 0.55f, SpriteEffects::None, 0.0f);
+            // Half a texel in from the cell's edge so bilinear filtering never reads the neighbour.
+            const float inv = 1.0f / static_cast<float>(kAtlasSize);
+            PlateSlot ps;
+            ps.atlas = atlas;
+            ps.u0 = (static_cast<float>(x) + 0.5f) * inv;
+            ps.u1 = (static_cast<float>(x + kPlateW) - 0.5f) * inv;
+            ps.v0 = (static_cast<float>(y) + 0.5f) * inv;
+            ps.v1 = (static_cast<float>(y + kPlateH) - 0.5f) * inv;
+            plates_[ids[i]] = ps;
+        }
+        s_.sprites->End();
+        device.SetRenderTarget(nullptr);
+        plateAtlases_.push_back(std::move(rt));
+        ++rendered_;
+    }
+}
+
+void Screens::Prepare()
+{
+    BuildPlateAtlases();
+    for (int i = 0; i < static_cast<int>(School::Subject::Count); ++i) (void)BoardFor(static_cast<School::Subject>(i));
+    for (const Room& r : plan_.rooms)
+        if (r.type == RoomType::Corridor && std::max(r.rect.Width(), r.rect.Depth()) >= 10.0f) (void)WingSignFor(r.wing, r.level);
 }
 
 Texture2D* Screens::WingSignFor(int wing, int level)
@@ -411,12 +466,12 @@ void Screens::DrawQuads(const DrawContext& ctx, const std::vector<Quad>& quads)
         const Color c = Color(255, 255, 255, 255);
         const Vector3 a = q.centre - q.right + q.up, b = q.centre + q.right + q.up, cc = q.centre + q.right - q.up, d = q.centre - q.right - q.up;
         // v = 0 is the top edge; u runs from the viewer's left (local +x, "b") to the right (local -x, "a").
-        scratch_.emplace_back(a, c, Vector2(1, 0));
-        scratch_.emplace_back(b, c, Vector2(0, 0));
-        scratch_.emplace_back(cc, c, Vector2(0, 1));
-        scratch_.emplace_back(a, c, Vector2(1, 0));
-        scratch_.emplace_back(cc, c, Vector2(0, 1));
-        scratch_.emplace_back(d, c, Vector2(1, 1));
+        scratch_.emplace_back(a, c, Vector2(q.u1, q.v0));
+        scratch_.emplace_back(b, c, Vector2(q.u0, q.v0));
+        scratch_.emplace_back(cc, c, Vector2(q.u0, q.v1));
+        scratch_.emplace_back(a, c, Vector2(q.u1, q.v0));
+        scratch_.emplace_back(cc, c, Vector2(q.u0, q.v1));
+        scratch_.emplace_back(d, c, Vector2(q.u1, q.v1));
         fx.setTextureProperty(q.texture);
         EffectBank::Apply(fx);
         ctx.device.DrawUserPrimitives(PrimitiveType::TriangleList, scratch_.data(), 0, 2);
@@ -509,7 +564,7 @@ void Screens::Draw(const DrawContext& ctx, const School::SchoolSim& sim, const W
             q.centre = centre;
             q.right = right;
             q.up = up;
-            q.texture = PlateFor(id);
+            if (!PlateFor(id, q)) continue;
             quads.push_back(q);
         }
     }

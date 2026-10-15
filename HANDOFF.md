@@ -37,10 +37,14 @@ Working notes for whoever continues (human or agent). Dates are when something w
   with blinking lights, a metronome on the piano, kitchen steam. `school-sim-cli --room CODE` prints a room's rectangle and
   fixtures (for placing the camera).
 
+- **Browser smoothness** (2026-10-15): CNA's Emscripten loop now honours a variable time step, pointer lock asks for unadjusted
+  movement (`web/shell.html`), door plates live in atlases rendered once (`Screens::Prepare`); `--hitch-log MS` finds stutter.
+  Details in `docs/WEB_BUILD.md`. Not yet confirmed by the owner on the real GPU. Compile jobs: at most 2 (`tools/build.sh` default).
+
 ## Build, run, test
 
 ```bash
-tools/build.sh                         # 3 jobs (the owner asked for at most 3 cores); build/ is the only tree
+tools/build.sh                         # 2 jobs (the owner asked for at most 2 cores); build/ is the only tree
 tools/check_all.sh                     # everything; -q skips the screenshot tour
 tools/tour.sh [-p busy] [-r SOFTWARE]  # screenshots into build/shots, exit 1 on failure or draw error
 tools/soak.sh                          # a school morning at x30, memory and stuck-people check

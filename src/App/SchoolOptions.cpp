@@ -51,6 +51,7 @@ const char* SchoolOptions::Usage()
         "  --pos X,Y,Z --yaw DEG --pitch DEG   start pose (metres, degrees)\n"
         "  --frames N                exit after N frames\n"
         "  --screenshot FILE.png [--screenshot-frame N]   save the back buffer and exit\n"
+        "  --hitch-log MS            log every frame longer than MS with where the time went (stutter hunting)\n"
         "  --fixed-step SECONDS      advance by a fixed step per frame (deterministic runs)\n"
         "  --script \"a;b;c\"          scripted actions (see src/App/SchoolGame.cpp, RunScript)\n"
         "  --validate                check the plan, timetable and schedule (no window); exit status 1 if invalid\n";
@@ -93,6 +94,7 @@ SchoolOptions SchoolOptions::Parse(int argc, char** argv)
         else if (Match(a, "--frames", v, i, argc, argv)) o.maxFrames = std::atoi(v);
         else if (Match(a, "--screenshot-frame", v, i, argc, argv)) o.screenshotFrame = std::atoi(v);
         else if (Match(a, "--screenshot", v, i, argc, argv)) o.screenshotPath = v;
+        else if (Match(a, "--hitch-log", v, i, argc, argv)) o.hitchMs = static_cast<float>(std::atof(v));
         else if (Match(a, "--fixed-step", v, i, argc, argv)) o.fixedTimeStep = static_cast<float>(std::atof(v));
         else if (Match(a, "--script", v, i, argc, argv)) o.script = v;
         else if (!std::strcmp(a, "--validate")) o.validate = true;

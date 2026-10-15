@@ -5,7 +5,7 @@
 #   tools/build_web.sh --serve    ... then serve it on http://localhost:8080/ (python3 http.server)
 #
 # build-consumer/ is the shared tree for standalone consumers (../CLAUDE.md); the native trees (build/, build-probe/) are untouched.
-# Environment: EMSDK (default ~/emsdk), JOBS (default 3), RECONFIGURE=1, VERBOSE=1.
+# Environment: EMSDK (default ~/emsdk), JOBS (default 2), RECONFIGURE=1, VERBOSE=1.
 set -u
 cd "$(dirname "$0")/.." || exit 2
 export CCACHE_DIR=${CCACHE_DIR:-/rv/cnaccache}
@@ -32,9 +32,9 @@ if [ ! -f "$build_dir/CMakeCache.txt" ] || [ "${RECONFIGURE:-0}" = 1 ]; then
     || { tail -30 "$build_dir/configure.log"; echo "configure FAILED"; exit 1; }
 fi
 if [ "${VERBOSE:-0}" = 1 ]; then
-  cmake --build "$build_dir" --target cna-school-simulator --parallel "${JOBS:-3}"; status=$?
+  cmake --build "$build_dir" --target cna-school-simulator --parallel "${JOBS:-2}"; status=$?
 else
-  cmake --build "$build_dir" --target cna-school-simulator --parallel "${JOBS:-3}" > "$build_dir/build.log" 2>&1; status=$?
+  cmake --build "$build_dir" --target cna-school-simulator --parallel "${JOBS:-2}" > "$build_dir/build.log" 2>&1; status=$?
   grep -E "error:|FAILED:|undefined (reference|symbol)|CMake Error|wasm-ld: error" -A3 "$build_dir/build.log" | grep -v "^--$" | cut -c1-260 | head -60
 fi
 [ $status -eq 0 ] || { echo "build FAILED (log: $build_dir/build.log)"; exit 1; }

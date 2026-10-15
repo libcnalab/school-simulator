@@ -10,7 +10,7 @@
 #   SCHOOL_CMAKE_ARGS    extra arguments for the configure step (e.g. -DSCHOOL_BUILD_APP=OFF for logic only)
 #   RECONFIGURE=1        run cmake again even if the tree is already configured
 #   VERBOSE=1            stream the full build output instead of only diagnostics
-#   JOBS=N               parallel jobs (default 3: the CPU budget set for this project)
+#   JOBS=N               parallel jobs (default 2: the CPU budget set for this project)
 #
 # ccache is used when it is on PATH; CCACHE_DIR=/rv/cnaccache and CCACHE_BASEDIR=/rv are exported if unset
 # (the one shared cache, see ../CLAUDE.md). Cache size is governed by the cache's own config, never here.
@@ -48,10 +48,10 @@ if [ ! -f "$build_dir/CMakeCache.txt" ] || [ "${RECONFIGURE:-0}" = 1 ]; then
 fi
 
 if [ "${VERBOSE:-0}" = 1 ]; then
-  cmake --build "$build_dir" --target "${targets[@]}" --parallel "${JOBS:-3}"
+  cmake --build "$build_dir" --target "${targets[@]}" --parallel "${JOBS:-2}"
   status=$?
 else
-  cmake --build "$build_dir" --target "${targets[@]}" --parallel "${JOBS:-3}" \
+  cmake --build "$build_dir" --target "${targets[@]}" --parallel "${JOBS:-2}" \
     > "$build_dir/build.log" 2>&1
   status=$?
   # Errors always; warnings only from this project's own sources (CNA's third_party code is noisy).
