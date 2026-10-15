@@ -460,10 +460,29 @@ void Screens::DrawQuads(const DrawContext& ctx, const std::vector<Quad>& quads)
     fx.setDiffuseColorProperty(Vector3(1, 1, 1));
     RenderStates::SetOpaque3D(ctx.device);
     ctx.device.getSamplerStatesProperty()[0] = SamplerState::LinearClamp;
-    for (const Quad& q : quads) {
-        if (q.texture == nullptr) continue;
+    // One draw per texture, not per quad: a corridor shows dozens of door plates, all from a few atlases, and every draw call
+    // costs a browser's WebGL far more than the triangles do.
+    std::vector<const Quad*> order;
+    order.reserve(quads.size());
+    for (const Quad& q : quads)
+        if (q.texture != nullptr) order.push_back(&q);
+    std::stable_sort(order.begin(), order.end(), [](const Quad* a, const Quad* b) { return a->texture < b->texture; });
+    const Color c = Color(255, 255, 255, 255);
+    scratch_.clear();
+    const auto flush = [&](Texture2D* texture) {
+        if (scratch_.empty()) return;
+        fx.setTextureProperty(texture);
+        EffectBank::Apply(fx);
+        ctx.device.DrawUserPrimitives(PrimitiveType::TriangleList, scratch_.data(), 0, static_cast<int>(scratch_.size() / 3));
         scratch_.clear();
-        const Color c = Color(255, 255, 255, 255);
+    };
+    Texture2D* current = nullptr;
+    for (const Quad* qp : order) {
+        const Quad& q = *qp;
+        if (q.texture != current) {
+            flush(current);
+            current = q.texture;
+        }
         const Vector3 a = q.centre - q.right + q.up, b = q.centre + q.right + q.up, cc = q.centre + q.right - q.up, d = q.centre - q.right - q.up;
         // v = 0 is the top edge; u runs from the viewer's left (local +x, "b") to the right (local -x, "a").
         scratch_.emplace_back(a, c, Vector2(q.u1, q.v0));
@@ -472,10 +491,8 @@ void Screens::DrawQuads(const DrawContext& ctx, const std::vector<Quad>& quads)
         scratch_.emplace_back(a, c, Vector2(q.u1, q.v0));
         scratch_.emplace_back(cc, c, Vector2(q.u0, q.v1));
         scratch_.emplace_back(d, c, Vector2(q.u1, q.v1));
-        fx.setTextureProperty(q.texture);
-        EffectBank::Apply(fx);
-        ctx.device.DrawUserPrimitives(PrimitiveType::TriangleList, scratch_.data(), 0, 2);
     }
+    flush(current);
 }
 
 void Screens::Draw(const DrawContext& ctx, const School::SchoolSim& sim, const WorldRenderer& world)

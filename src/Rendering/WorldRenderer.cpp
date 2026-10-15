@@ -318,7 +318,7 @@ void WorldRenderer::Update(const Vector3& eye, int level, float dt, const std::v
         buildQueue_.erase(buildQueue_.begin());
         Build(id);
         ++built;
-        if (std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count() > 12.0) break;
+        if (std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count() > 6.0) break;
     }
     stats_.buildMilliseconds = static_cast<float>(std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count());
     stats_.roomsLoaded = static_cast<int>(rooms_.size());

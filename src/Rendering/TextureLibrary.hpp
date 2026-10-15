@@ -26,6 +26,8 @@ public:
     Register(const std::string& name, std::unique_ptr<Microsoft::Xna::Framework::Graphics::Texture2D> texture);
     /** Releases a texture added with Register(). Unknown names are ignored. */
     void Unregister(const std::string& name) { textures_.erase(name); }
+    /** Loads every PNG of `directory` now (decoding, mip chain and upload cost milliseconds each: better at start-up than mid-frame). */
+    void Preload(const std::string& directory);
     [[nodiscard]] int MissingCount() const { return missing_; }
     [[nodiscard]] std::size_t Count() const { return textures_.size(); }
 

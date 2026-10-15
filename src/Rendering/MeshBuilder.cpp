@@ -246,21 +246,81 @@ std::vector<VertexPositionColorTexture> MeshBuilder::Bake(const std::vector<Bake
 {
     std::vector<VertexPositionColorTexture> out;
     out.reserve(vertices_.size());
+
+    // Rooms have dozens of lights, but a vertex is lit only by those within a light's radius. The lights go into a uniform grid
+    // whose cell is the largest radius, so a vertex looks at its own cell and the 26 around it instead of at every light.
+    // (This is the cost of building a room: it used to be tens of milliseconds for a library, a visible stall in a browser.)
+    const std::size_t lightCount = lights.size();
+    float cell = 1.0f;
+    Vector3 lo(0, 0, 0);
+    int dimX = 1, dimY = 1, dimZ = 1;
+    std::vector<int> cellStart, cellLights;
+    const bool grid = lightCount > 8;
+    if (grid) {
+        lo = lights[0].position;
+        Vector3 hi = lo;
+        for (const BakedLight& l : lights) {
+            cell = std::max(cell, l.radius);
+            lo = Vector3(std::min(lo.X, l.position.X), std::min(lo.Y, l.position.Y), std::min(lo.Z, l.position.Z));
+            hi = Vector3(std::max(hi.X, l.position.X), std::max(hi.Y, l.position.Y), std::max(hi.Z, l.position.Z));
+        }
+        const auto dim = [&](float extent) { return std::clamp(static_cast<int>(extent / cell) + 1, 1, 64); };
+        dimX = dim(hi.X - lo.X);
+        dimY = dim(hi.Y - lo.Y);
+        dimZ = dim(hi.Z - lo.Z);
+        // a light's cell is clamped into the grid, so cells at the edge are never wrong, only (rarely) fuller
+        const auto cellOf = [&](const Vector3& p, int& cx, int& cy, int& cz) {
+            cx = std::clamp(static_cast<int>(std::floor((p.X - lo.X) / cell)), 0, dimX - 1);
+            cy = std::clamp(static_cast<int>(std::floor((p.Y - lo.Y) / cell)), 0, dimY - 1);
+            cz = std::clamp(static_cast<int>(std::floor((p.Z - lo.Z) / cell)), 0, dimZ - 1);
+        };
+        std::vector<int> count(static_cast<std::size_t>(dimX * dimY * dimZ) + 1, 0);
+        std::vector<int> where(lightCount);
+        for (std::size_t i = 0; i < lightCount; ++i) {
+            int cx, cy, cz;
+            cellOf(lights[i].position, cx, cy, cz);
+            where[i] = (cz * dimY + cy) * dimX + cx;
+            ++count[static_cast<std::size_t>(where[i]) + 1];
+        }
+        for (std::size_t i = 1; i < count.size(); ++i) count[i] += count[i - 1];
+        cellStart = count;
+        cellLights.resize(lightCount);
+        std::vector<int> fill(count.begin(), count.end() - 1);
+        for (std::size_t i = 0; i < lightCount; ++i) cellLights[static_cast<std::size_t>(fill[static_cast<std::size_t>(where[i])]++)] = static_cast<int>(i);
+    }
+
+    const auto addLight = [](const BakedLight& light, const Vertex& v, float& r, float& g, float& b) {
+        const float dx = light.position.X - v.position.X, dy = light.position.Y - v.position.Y, dz = light.position.Z - v.position.Z;
+        const float d2 = dx * dx + dy * dy + dz * dz;
+        if (d2 >= light.radius * light.radius || d2 < 1e-8f) return;
+        const float dist = std::sqrt(d2);
+        const float inv = 1.0f / dist;
+        // Half-Lambert wrap keeps walls facing away from a ceiling light dim rather than black.
+        const float ndl = (v.normal.X * dx + v.normal.Y * dy + v.normal.Z * dz) * inv * 0.5f + 0.5f;
+        const float falloff = 1.0f - dist / light.radius;
+        const float w = light.intensity * ndl * ndl * falloff * falloff;
+        r += light.color.X * w;
+        g += light.color.Y * w;
+        b += light.color.Z * w;
+    };
+
     for (const Vertex& v : vertices_) {
-        Vector3 lit = ambient;
-        for (const BakedLight& light : lights) {
-            Vector3 toLight = light.position - v.position;
-            const float dist = toLight.Length();
-            if (dist >= light.radius || dist < 1e-4f) continue;
-            toLight = toLight * (1.0f / dist);
-            // Half-Lambert wrap keeps walls facing away from a ceiling light dim rather than black.
-            const float ndl = Vector3::Dot(v.normal, toLight) * 0.5f + 0.5f;
-            const float falloff = 1.0f - dist / light.radius;
-            lit += light.color * (light.intensity * ndl * ndl * falloff * falloff);
+        float r = ambient.X, g = ambient.Y, b = ambient.Z;
+        if (!grid) {
+            for (const BakedLight& light : lights) addLight(light, v, r, g, b);
+        } else {
+            const int cx = static_cast<int>(std::floor((v.position.X - lo.X) / cell));
+            const int cy = static_cast<int>(std::floor((v.position.Y - lo.Y) / cell));
+            const int cz = static_cast<int>(std::floor((v.position.Z - lo.Z) / cell));
+            for (int z = std::max(cz - 1, 0); z <= std::min(cz + 1, dimZ - 1); ++z)
+                for (int y = std::max(cy - 1, 0); y <= std::min(cy + 1, dimY - 1); ++y)
+                    for (int x = std::max(cx - 1, 0); x <= std::min(cx + 1, dimX - 1); ++x) {
+                        const std::size_t c = static_cast<std::size_t>((z * dimY + y) * dimX + x);
+                        for (int k = cellStart[c]; k < cellStart[c + 1]; ++k) addLight(lights[static_cast<std::size_t>(cellLights[static_cast<std::size_t>(k)])], v, r, g, b);
+                    }
         }
         const float k = 1.0f - v.emissive;
-        const Vector3 shade = Vector3(v.albedo.X * (lit.X * k + v.emissive), v.albedo.Y * (lit.Y * k + v.emissive),
-                                      v.albedo.Z * (lit.Z * k + v.emissive));
+        const Vector3 shade = Vector3(v.albedo.X * (r * k + v.emissive), v.albedo.Y * (g * k + v.emissive), v.albedo.Z * (b * k + v.emissive));
         out.emplace_back(v.position, ToColor(shade, v.alpha), v.uv);
     }
     return out;

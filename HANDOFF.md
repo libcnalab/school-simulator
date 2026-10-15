@@ -39,7 +39,8 @@ Working notes for whoever continues (human or agent). Dates are when something w
 
 - **Browser smoothness** (2026-10-15): CNA's Emscripten loop now honours a variable time step, pointer lock asks for unadjusted
   movement (`web/shell.html`), door plates live in atlases rendered once (`Screens::Prepare`); `--hitch-log MS` finds stutter.
-  Details in `docs/WEB_BUILD.md`. Not yet confirmed by the owner on the real GPU. Compile jobs: at most 2 (`tools/build.sh` default).
+  Second round: light bake grid (room builds 5x faster), texture preload, shader warm-up, batched plate quads. Details in `docs/WEB_BUILD.md`.
+  Not yet confirmed by the owner on the real GPU. Compile jobs: at most 2 (`tools/build.sh` default).
 
 ## Build, run, test
 

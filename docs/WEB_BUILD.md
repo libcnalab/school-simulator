@@ -62,6 +62,17 @@ Three causes, all fixed:
   packed into 2048x2048 atlases (10 x 32 plates) rendered once at start (`Screens::Prepare`, with the whiteboards and wing signs),
   and drawn with a sub-rectangle of the atlas.
 
+Stalls that remained (reported again after the first round), found with `--hitch-log` and fixed the same day:
+
+- **Building a room**: the per-vertex light bake (`MeshBuilder::Bake`) looped over every light for every vertex; a library (108 lights,
+  60 000 vertices) took ~60 ms natively, so ~150 ms in a browser, on the frame it came into range. The lights now go into a grid
+  and a vertex looks only at its neighbouring cells (same result within a rounding step: checked against the plain loop in
+  `school_app_tests`); the slowest room is now ~10 ms natively. The per-frame build budget is 6 ms (one room at least).
+- **First use of a texture or a shader variant**: all textures are loaded at start (`TextureLibrary::Preload`) and every
+  BasicEffect variant (fog, per-pixel lighting, one or two lights) is drawn once as a degenerate triangle (`EffectBank::WarmUp`), so
+  nothing is decoded, uploaded or compiled while walking.
+- **Draw calls of the door plates**: quads are batched per texture (one call per atlas instead of one per plate).
+
 `--hitch-log MS` (or `?arg=--hitch-log=50`) logs every frame longer than MS with where the time went (input, player, sim,
 screens, world, offscreen, sky, people, ...), for hunting stutter on a real GPU.
 

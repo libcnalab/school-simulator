@@ -139,12 +139,14 @@ void SchoolGame::LoadContent()
     textures_ = std::make_unique<TextureLibrary>(device, getContentProperty());
     effects_ = std::make_unique<EffectBank>(device, textures_->White());
     shapes_ = std::make_unique<Shapes>(device);
+    effects_->WarmUp(device);
     sprites_ = std::make_unique<SpriteBatch>(device);
     font_ = FontLoader::Load(getContentProperty(), services_.contentRoot, "ui");
     titleFont_ = FontLoader::Load(getContentProperty(), services_.contentRoot, "title");
     if (!titleFont_ && font_) titleFont_ = FontLoader::Load(getContentProperty(), services_.contentRoot, "ui");
     audio_ = std::make_unique<AudioSystem>(getContentProperty(), options_.audio, options_.volume);
     services_.textures = textures_.get();
+    if (!services_.contentRoot.empty()) textures_->Preload(services_.contentRoot + "/Textures");
     services_.effects = effects_.get();
     services_.shapes = shapes_.get();
     services_.sprites = sprites_.get();

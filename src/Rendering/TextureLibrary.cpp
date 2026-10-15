@@ -1,5 +1,8 @@
 #include "Rendering/TextureLibrary.hpp"
 
+#include <filesystem>
+#include <system_error>
+
 #include <exception>
 #include <vector>
 
@@ -28,6 +31,13 @@ Texture2D* TextureLibrary::Register(const std::string& name, std::unique_ptr<Tex
     Texture2D* ptr = texture.get();
     textures_[name] = std::move(texture);
     return ptr;
+}
+
+void TextureLibrary::Preload(const std::string& directory)
+{
+    std::error_code ec;
+    for (const auto& entry : std::filesystem::directory_iterator(directory, ec))
+        if (entry.is_regular_file(ec) && entry.path().extension() == ".png") (void)Get(entry.path().stem().string());
 }
 
 Texture2D* TextureLibrary::Get(const std::string& name)

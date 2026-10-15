@@ -60,6 +60,32 @@ int main()
                     const float below = r.type == RoomType::ElevatorCab ? 1.5f : 1.0f;   // a shaft has a pit
                     CHECK_MSG(bb.Min.Y >= y0 - below && bb.Max.Y <= y0 + static_cast<float>(r.levels) * kFloorHeight + 12.0f, "%s/%s has a strange height", r.name.c_str(), texture.c_str());
                     for (const std::uint16_t i : b.Indices()) CHECK_MSG(i < b.VertexCount(), "%s/%s index out of range", r.name.c_str(), texture.c_str());
+                    if (g.lights.size() > 8) {
+                        // The grid-accelerated light bake must agree with the plain loop over every light (within a rounding step).
+                        const auto baked = b.Bake(g.lights, g.ambient);
+                        CHECK_MSG(baked.size() == b.VertexCount(), "%s/%s bake size", r.name.c_str(), texture.c_str());
+                        for (std::size_t vi = 0; vi < baked.size() && vi < b.Vertices().size(); ++vi) {
+                            const MeshBuilder::Vertex& v = b.Vertices()[vi];
+                            Vector3 lit = g.ambient;
+                            for (const BakedLight& light : g.lights) {
+                                Vector3 toLight = light.position - v.position;
+                                const float dist = toLight.Length();
+                                if (dist >= light.radius || dist < 1e-4f) continue;
+                                toLight = toLight * (1.0f / dist);
+                                const float ndl = Vector3::Dot(v.normal, toLight) * 0.5f + 0.5f;
+                                const float falloff = 1.0f - dist / light.radius;
+                                lit += light.color * (light.intensity * ndl * ndl * falloff * falloff);
+                            }
+                            const float k = 1.0f - v.emissive;
+                            const auto byte = [](float x) { return static_cast<int>(std::fmin(std::fmax(x, 0.0f), 1.0f) * 255.0f + 0.5f); };
+                            const int er = byte(v.albedo.X * (lit.X * k + v.emissive)), eg = byte(v.albedo.Y * (lit.Y * k + v.emissive)), eb = byte(v.albedo.Z * (lit.Z * k + v.emissive));
+                            const auto& c = baked[vi].Color;
+                            if (std::abs(c.getRProperty() - er) > 1 || std::abs(c.getGProperty() - eg) > 1 || std::abs(c.getBProperty() - eb) > 1) {
+                                CHECK_MSG(false, "%s/%s vertex %zu baked %d %d %d, expected %d %d %d", r.name.c_str(), texture.c_str(), vi, c.getRProperty(), c.getGProperty(), c.getBProperty(), er, eg, eb);
+                                break;
+                            }
+                        }
+                    }
                 }
         CHECK_MSG(!g.meshes.Empty(), "%s has no geometry", r.name.c_str());
         if (r.Indoor()) CHECK_MSG(!g.lights.empty(), "%s has no lights", r.name.c_str());

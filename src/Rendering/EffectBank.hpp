@@ -33,6 +33,13 @@ public:
 
     void SetCamera(const Microsoft::Xna::Framework::Matrix& view, const Microsoft::Xna::Framework::Matrix& projection);
 
+    /**
+     * Draws a degenerate triangle with every shader variant the school uses (fog on/off, per-pixel lighting, one or two lights),
+     * so each program is compiled and linked now instead of on the first frame that needs it. A browser's WebGL (ANGLE) takes tens of
+     * milliseconds per program, which showed as a stall on entering the first lab or looking at fog.
+     */
+    void WarmUp(Microsoft::Xna::Framework::Graphics::GraphicsDevice& device);
+
     /** Applies the effect's current technique pass. */
     static void Apply(Microsoft::Xna::Framework::Graphics::BasicEffect& effect);
 
