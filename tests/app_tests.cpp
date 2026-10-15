@@ -9,6 +9,7 @@
 #include "Scene/Collision.hpp"
 #include "Simulation/Population.hpp"
 #include "World/SchoolPlan.hpp"
+#include "World/StairGeometry.hpp"
 
 using namespace School;
 using Microsoft::Xna::Framework::BoundingBox;
@@ -91,6 +92,41 @@ int main()
         if (r.Indoor()) CHECK_MSG(!g.lights.empty(), "%s has no lights", r.name.c_str());
     }
     std::printf("geometry: %zu rooms, %d builders, %lld vertices, %lld triangles\n", plan.rooms.size(), builders, vertices, triangles);
+
+    // --- stairs: the steps climb the way the player walks (Blueprint's stairSurfaces) --------------------------------
+    {
+        int flights = 0;
+        for (const StairShaft& sh : plan.stairs) {
+            const School::StairFrame f{sh.footprint, sh.entrySide};
+            const float run = f.D() - sh.entryDepth - sh.midDepth;
+            for (int level = sh.levelLow; level < sh.levelHigh; ++level) {
+                const Room& room = plan.room(sh.landing[static_cast<std::size_t>(level - sh.levelLow)]);
+                const RoomGeometry g = BuildRoomGeometry(plan, layouts, room.id);
+                const float base = plan.FloorY(level);
+                // highest upward-facing point of the step geometry on a line across a flight (slice rectangle, a little tolerance)
+                const auto topIn = [&](float u0, float u1, float v0, float v1) {
+                    const Rect r = f.World(u0, u1, v0, v1);
+                    float top = -1e9f;
+                    for (const auto& [texture, list] : g.meshes.OpaqueMeshes())
+                        for (const MeshBuilder& b : list)
+                            for (const MeshBuilder::Vertex& v : b.Vertices())
+                                if (v.position.X >= r.x0 - 0.02f && v.position.X <= r.x1 + 0.02f && v.position.Z >= r.z0 - 0.02f && v.position.Z <= r.z1 + 0.02f &&
+                                    v.normal.Y > 0.9f && texture == "floor_concrete")
+                                    top = std::max(top, v.position.Y);
+                    return top;
+                };
+                                const float u1a = 0.0f, u1b = sh.flightWidth, u2a = f.W() - sh.flightWidth, u2b = f.W();
+                const float f1Entry = topIn(u1a, u1b, sh.entryDepth, sh.entryDepth), f1Far = topIn(u1a, u1b, sh.entryDepth + run, sh.entryDepth + run);
+                const float f2Entry = topIn(u2a, u2b, sh.entryDepth, sh.entryDepth), f2Far = topIn(u2a, u2b, sh.entryDepth + run, sh.entryDepth + run);
+                CHECK_MSG(f1Far > f1Entry + 0.3f, "stair %d level %d: flight 1 does not climb away from the entry (%.2f -> %.2f)", sh.id, level, static_cast<double>(f1Entry - base), static_cast<double>(f1Far - base));
+                CHECK_MSG(f2Entry > f2Far + 0.3f, "stair %d level %d: flight 2 does not climb towards the entry (%.2f -> %.2f)", sh.id, level, static_cast<double>(f2Far - base), static_cast<double>(f2Entry - base));
+                CHECK_MSG(std::fabs(f2Entry - (base + kFloorHeight)) < 0.25f, "stair %d level %d: flight 2 does not reach the next floor (%.2f)", sh.id, level, static_cast<double>(f2Entry - base));
+                CHECK_MSG(std::fabs(f1Far - (base + kFloorHeight * 0.5f)) < 0.25f && std::fabs(f2Far - (base + kFloorHeight * 0.5f)) < 0.25f, "stair %d level %d: flights do not meet at the half landing", sh.id, level);
+                ++flights;
+            }
+        }
+        std::printf("stairs: %d flight pairs checked\n", flights);
+    }
 
     // --- facade --------------------------------------------------------------------------------------------------
     {

@@ -574,17 +574,24 @@ void AddStairs(const SchoolPlan& plan, const Room& room, MeshSet& set)
     }
     if (level >= s.levelHigh) return;
     const int steps = std::max(6, static_cast<int>(std::lround(half / 0.17f)));
-    const auto flight = [&](float u0, float u1, float yFrom, float yTo) {
+    // yAtEntry / yAtFar: the height of the flight at the entry end (v = Le) and at the far end (v = Le + run). Flight 1 climbs away from
+    // the entry landing, flight 2 climbs back towards it (the same slopes as Blueprint's stairSurfaces, which the player walks on). Each
+    // tread is as high as the higher edge of its slice, so going up the next riser is always in front of you.
+    const auto flight = [&](float u0, float u1, float yAtEntry, float yAtFar) {
         for (int i = 0; i < steps; ++i) {
-            const float v0 = Le + run * static_cast<float>(i) / static_cast<float>(steps);
-            const float v1 = Le + run * static_cast<float>(i + 1) / static_cast<float>(steps);
-            const float yTop = yFrom + (yTo - yFrom) * static_cast<float>(i + 1) / static_cast<float>(steps);
-            const float yBottom = yFrom + (yTo - yFrom) * static_cast<float>(i) / static_cast<float>(steps) - 0.3f;
+            const float t0 = static_cast<float>(i) / static_cast<float>(steps);
+            const float t1 = static_cast<float>(i + 1) / static_cast<float>(steps);
+            const float v0 = Le + run * t0;
+            const float v1 = Le + run * t1;
+            const float h0 = yAtEntry + (yAtFar - yAtEntry) * t0;
+            const float h1 = yAtEntry + (yAtFar - yAtEntry) * t1;
+            const float yTop = std::max(h0, h1);
+            const float yBottom = std::min(h0, h1) - 0.3f;
             worldBox(f.World(u0, u1, v0, v1), std::min(yBottom, yTop - 0.05f), yTop, concrete, stepTint, 0.0f);
         }
     };
-    flight(0.0f, fw, base, base + half);                         // flight 1, up to the half landing
-    flight(W - fw, W, base + half, base + School::kFloorHeight);  // flight 2, up to the next level
+    flight(0.0f, fw, base, base + half);                          // flight 1, up to the half landing
+    flight(W - fw, W, base + School::kFloorHeight, base + half);  // flight 2, up to the next level (its top is at the entry end)
     worldBox(f.World(0, W, Le + run, D), base + half - 0.3f, base + half, concrete, stepTint);   // half landing
     // Handrails along the inner edges of both flights and across the well on the entry landing.
     const auto p = [&](float u, float v, float y) { return Vector3(f.Point(u, v).x, y, f.Point(u, v).z); };
