@@ -128,6 +128,121 @@ int main()
         std::printf("stairs: %d flight pairs checked\n", flights);
     }
 
+    // --- walking the stairs: the player's own movement rule (collision, then the walk surface under the new place) ------------
+    {
+        const CollisionWorld walkCollision(plan, layouts);
+        int climbs = 0, stuck = 0;
+        for (const StairShaft& sh : plan.stairs)
+            for (int level = sh.levelLow; level < sh.levelHigh; ++level)
+                for (const bool upward : {true, false}) {
+                    const std::vector<Vec3> path = StairClimbPath(plan, sh, level, upward);
+                    Vector3 pos(path.front().x, path.front().y, path.front().z);
+                    size_t target = 1;
+                    float stuckFor = 0.0f, travelled = 0.0f;
+                    const float step = 1.0f / 60.0f, speed = 3.4f;
+                    for (int frame = 0; frame < 60 * 40 && target < path.size(); ++frame) {
+                        const Vec3& goal = path[target];
+                        Vector3 to(goal.x - pos.X, 0.0f, goal.z - pos.Z);
+                        const float dist = to.Length();
+                        if (dist < 0.25f) {
+                            ++target;
+                            continue;
+                        }
+                        to = to * (1.0f / dist);
+                        const int walkLevel = plan.LevelAt(pos.Y);
+                        Vector3 next = walkCollision.Move(pos, to * (speed * step), 0.3f, walkLevel);
+                        const float ground = plan.GroundHeight(Vec2{next.X, next.Z}, pos.Y);
+                        if (ground > pos.Y + 0.6f) next = pos;
+                        else next.Y = ground;
+                        const float moved = std::hypot(pos.X - next.X, pos.Z - next.Z);
+                        travelled += moved;
+                        stuckFor = moved < 1e-4f ? stuckFor + step : 0.0f;
+                        pos = next;
+                        if (stuckFor > 1.0f) break;
+                    }
+                    ++climbs;
+                    const bool arrived = target >= path.size();
+                    if (!arrived) ++stuck;
+                    CHECK_MSG(arrived, "stair %d level %d %s: the walker stops at path point %zu of %zu, at (%.2f, %.2f, %.2f), heading for (%.2f, %.2f, %.2f)", sh.id, level, upward ? "up" : "down", target,
+                              path.size(), static_cast<double>(pos.X), static_cast<double>(pos.Y), static_cast<double>(pos.Z), static_cast<double>(path[std::min(target, path.size() - 1)].x),
+                              static_cast<double>(path[std::min(target, path.size() - 1)].y), static_cast<double>(path[std::min(target, path.size() - 1)].z));
+                    if (arrived) CHECK_MSG(std::fabs(pos.Y - path.back().y) < 0.3f, "stair %d level %d %s: ends at height %.2f, expected %.2f", sh.id, level, upward ? "up" : "down", static_cast<double>(pos.Y), static_cast<double>(path.back().y));
+                }
+        std::printf("stairs walked: %d climbs, %d stuck\n", climbs, stuck);
+        // The whole way a person takes: from the corridor through the door, up both flights, through the door of the next level.
+        int routes = 0;
+        const auto walkRoute = [&](const std::vector<Vec3>& route, const char* what, int stairId, int level) {
+            Vector3 pos(route.front().x, route.front().y, route.front().z);
+            size_t target = 1;
+            float stuckFor = 0.0f;
+            for (int frame = 0; frame < 60 * 90 && target < route.size(); ++frame) {
+                const Vec3& goal = route[target];
+                Vector3 to(goal.x - pos.X, 0.0f, goal.z - pos.Z);
+                const float dist = to.Length();
+                if (dist < 0.25f) {
+                    ++target;
+                    continue;
+                }
+                to = to * (1.0f / dist);
+                Vector3 next = walkCollision.Move(pos, to * (3.4f / 60.0f), 0.3f, plan.LevelAt(pos.Y));
+                const float ground = plan.GroundHeight(Vec2{next.X, next.Z}, pos.Y);
+                if (ground > pos.Y + 0.6f) next = pos;
+                else next.Y = ground;
+                const float moved = std::hypot(pos.X - next.X, pos.Z - next.Z);
+                stuckFor = moved < 1e-4f ? stuckFor + 1.0f / 60.0f : 0.0f;
+                pos = next;
+                if (stuckFor > 1.0f) break;
+            }
+            ++routes;
+            CHECK_MSG(target >= route.size(), "stair %d level %d %s: the walker stops at point %zu of %zu, at (%.2f, %.2f, %.2f)", stairId, level, what, target, route.size(), static_cast<double>(pos.X),
+                      static_cast<double>(pos.Y), static_cast<double>(pos.Z));
+            if (target >= route.size()) CHECK_MSG(std::fabs(pos.Y - route.back().y) < 0.3f, "stair %d level %d %s: ends at height %.2f, expected %.2f", stairId, level, what, static_cast<double>(pos.Y),
+                                                  static_cast<double>(route.back().y));
+        };
+        for (const StairShaft& sh : plan.stairs)
+            for (int level = sh.levelLow; level < sh.levelHigh; ++level) {
+                const auto doorPoints = [&](int lvl, bool toDoor) {
+                    // outside the stairwell's door at `lvl`, then in the doorway, at floor height; reversed when leaving
+                    const Room& room = plan.room(sh.landing[static_cast<std::size_t>(lvl - sh.levelLow)]);
+                    const Door& d = plan.door(room.doors.front());
+                    Vec2 out = d.Normal();
+                    if (d.a != room.id) out = out * -1.0f;   // from the stairwell outwards
+                    const float y = plan.FloorY(lvl);
+                    std::vector<Vec3> pts = {Vec3(d.pos + out * 1.6f, y), Vec3(d.pos + out * -0.9f, y)};
+                    if (!toDoor) std::reverse(pts.begin(), pts.end());
+                    return pts;
+                };
+                for (const bool upward : {true, false}) {
+                    std::vector<Vec3> route = doorPoints(upward ? level : level + 1, true);
+                    const std::vector<Vec3> climb = StairClimbPath(plan, sh, level, upward);
+                    route.insert(route.end(), climb.begin() + 1, climb.end() - 1);   // the landing points are inside the doorways already
+                    const std::vector<Vec3> leave = doorPoints(upward ? level + 1 : level, false);
+                    route.insert(route.end(), leave.begin(), leave.end());
+                    walkRoute(route, upward ? "route up" : "route down", sh.id, level);
+                }
+            }
+        // The hole above flight 1 on the top landing is fenced: walking at it does not drop the player down the well.
+        for (const StairShaft& sh : plan.stairs) {
+            const StairFrame f{sh.footprint, sh.entrySide};
+            const float top = plan.FloorY(sh.levelHigh);
+            Vec2 hole = f.Point(sh.flightWidth * 0.5f, sh.entryDepth + 2.0f);
+            const Vec2 start = f.Point(sh.flightWidth * 0.5f, sh.entryDepth * 0.5f);
+            Vector3 pos(start.x, top, start.z);
+            for (int frame = 0; frame < 60 * 6; ++frame) {
+                Vector3 to(hole.x - pos.X, 0.0f, hole.z - pos.Z);
+                if (to.Length() < 0.05f) break;
+                to = to * (1.0f / to.Length());
+                Vector3 next = walkCollision.Move(pos, to * (3.4f / 60.0f), 0.3f, plan.LevelAt(pos.Y));
+                const float ground = plan.GroundHeight(Vec2{next.X, next.Z}, pos.Y);
+                if (ground > pos.Y + 0.6f) next = pos;
+                else next.Y = ground;
+                pos = next;
+            }
+            CHECK_MSG(pos.Y > top - 0.3f, "stair %d: walking at the hole on the top landing drops the player to %.2f (floor %.2f)", sh.id, static_cast<double>(pos.Y), static_cast<double>(top));
+        }
+        std::printf("stairs routes walked: %d\n", routes);
+    }
+
     // --- facade --------------------------------------------------------------------------------------------------
     {
         const FacadeGeometry f = BuildFacadeGeometry(plan);

@@ -519,9 +519,15 @@ public:
                     add(f.World(0, s.flightWidth, Le, Le + run), f.Axis(), f.Along(Le), f.Along(Le + run), base, base + half);                               // flight 1
                     add(f.World(0, W, Le + run, D), 0, 0, 0, base + half, base + half);                                                                    // half landing
                     add(f.World(W - s.flightWidth, W, Le, Le + run), f.Axis(), f.Along(Le), f.Along(Le + run), base + kFloorHeight, base + half);           // flight 2
-                    plan.stairSolids.push_back({f.World(W - s.flightWidth, W, Le, Le + run), base - 0.5f, base + half});     // mass under flight 2
-                    plan.stairSolids.push_back({f.World(0, W, Le + run, D), base - 0.5f, base + half});                       // mass under the half landing
+                    // Only the open well is solid. The masses under the flights and the half landing that used to be here reached down to
+                    // the floor and overlapped the flights of the level below, which pass through the same footprint: the player was stopped
+                    // 0.3 m short of the half landing and could not use flight 2 at all. What lies under a flight needs no wall: its ground
+                    // is higher than a step (GroundHeight), so it cannot be entered.
                     plan.stairSolids.push_back({f.World(s.flightWidth, W - s.flightWidth, Le, Le + run), base - 0.5f, base + kFloorHeight * 2.0f});   // the open well
+                } else if (level > s.levelLow) {
+                    // The top landing: the hole above flight 1 of the level below is fenced off (the way down is flight 2). The fence starts
+                    // just under the floor so the people on the flights below walk under it.
+                    plan.stairSolids.push_back({f.World(0, s.flightWidth, Le, Le + run), base - 0.05f, base + 1.2f});
                 }
             }
         }

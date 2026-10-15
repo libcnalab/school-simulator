@@ -30,3 +30,11 @@
 - CCTV quads hidden inside the screen fixture (missing the depth offset). 2026-10-14.
 - Extreme population: seat and queue overflow positions could leave the room; clamped. 2026-10-14.
 - Bells rung during the start-up fast-forward were announced as news. 2026-10-14.
+
+## Stairs: collision (fixed 2026-10-15)
+
+The invisible masses under the flights and the half landing reached down to the floor of their level and overlapped the flights of the
+level below, which pass through the same footprint. The player was stopped 0.3 m before the half landing (the ramp is 0.12 m below the
+landing when the 0.3 m body touches it) and could not use flight 2 at all. Only the open well is solid now, and the top landing has a
+fence over the hole above flight 1. `school_app_tests` walks every flight pair up and down (the NPC waypoints, then the whole route
+through the doors) with the player's own movement rule, and checks that walking at the hole does not drop the player.
