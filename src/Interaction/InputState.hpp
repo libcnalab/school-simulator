@@ -8,6 +8,8 @@
 #include "Microsoft/Xna/Framework/Input/MouseState.hpp"
 #include "Microsoft/Xna/Framework/PlayerIndex.hpp"
 
+#include "CnaEngine/Input/InputSnapshot.hpp"
+
 /** This frame's and last frame's input, so key presses can be detected as edges. */
 class InputState {
 public:
@@ -19,7 +21,11 @@ public:
         keyboard_ = Microsoft::Xna::Framework::Input::Keyboard::GetState();
         mouse_ = Microsoft::Xna::Framework::Input::Mouse::GetState();
         pad_ = Microsoft::Xna::Framework::Input::GamePad::GetState(Microsoft::Xna::Framework::PlayerIndex::One);
+        snapshot_ = CnaEngine::Input::InputSnapshot{keyboard_, mouse_, pad_};
     }
+
+    /** This frame's devices as cna-engine's action map reads them. */
+    [[nodiscard]] const CnaEngine::Input::InputSnapshot& Snapshot() const { return snapshot_; }
 
     [[nodiscard]] bool Down(Microsoft::Xna::Framework::Input::Keys key) const { return keyboard_.IsKeyDown(key); }
     [[nodiscard]] bool Pressed(Microsoft::Xna::Framework::Input::Keys key) const
@@ -65,4 +71,5 @@ private:
     Microsoft::Xna::Framework::Input::MouseState previousMouse_;
     Microsoft::Xna::Framework::Input::GamePadState pad_;
     Microsoft::Xna::Framework::Input::GamePadState previousPad_;
+    CnaEngine::Input::InputSnapshot snapshot_;
 };

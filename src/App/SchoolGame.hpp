@@ -38,6 +38,8 @@
 #include "UI/Minimap.hpp"
 #include "World/SchoolPlan.hpp"
 
+#include "CnaEngine/Input/ActionMap.hpp"
+
 class SchoolGame : public Microsoft::Xna::Framework::Game {
 public:
     explicit SchoolGame(const SchoolOptions& options);
@@ -105,6 +107,16 @@ private:
     FirstPersonCamera camera_;
     std::unique_ptr<PlayerController> player_;
     InputState input_;
+    // The system keys (pause, map, overlays, screenshots, clock, weather, ...) and "use" as cna-engine actions.
+    // Walking and looking stay with PlayerController, which reads the devices itself (analog sticks, relative
+    // mouse motion).
+    CnaEngine::Input::ActionMap controls_;
+    struct Actions {
+        CnaEngine::Input::ActionId pause, help, stats, fly, debugOverlay, map, minimap, mute, screenshot, fullscreen,
+            respawn, mouseFaster, mouseSlower, volumeUp, volumeDown, clockStop, speed1, speed2, speed5, speed10, speed30,
+            clockBack, clockForward, nextPhase, bell, drill, announce, weather, quit, resume, use;
+    } actions_{};
+    void BindControls();
     std::string rendererName_;
 
     // --hitch-log: where the time of the current frame went (milliseconds), logged when the frame is slow

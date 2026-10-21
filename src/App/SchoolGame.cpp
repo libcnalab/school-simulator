@@ -15,6 +15,7 @@
 #include "Microsoft/Xna/Framework/Graphics/ClearOptions.hpp"
 #include "Microsoft/Xna/Framework/Graphics/DepthFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsProfile.hpp"
+#include "Microsoft/Xna/Framework/Input/Buttons.hpp"
 #include "Microsoft/Xna/Framework/Input/Keys.hpp"
 #include "Microsoft/Xna/Framework/MathHelper.hpp"
 #include "Rendering/AssetPaths.hpp"
@@ -72,6 +73,50 @@ SchoolGame::SchoolGame(const SchoolOptions& options) : options_(options), graphi
     setIsFixedTimeStepProperty(false);
     getWindowProperty().setTitleProperty("CNA School Simulator");
     getWindowProperty().setAllowUserResizingProperty(true);
+    BindControls();
+}
+
+void SchoolGame::BindControls()
+{
+    using CnaEngine::Input::Binding;
+    const auto action = [&](const char* name, std::initializer_list<Binding> bindings) {
+        const CnaEngine::Input::ActionId id = controls_.AddAction(name);
+        for (const Binding& binding : bindings) controls_.Bind(id, binding);
+        return id;
+    };
+    const auto key = [](Keys k) { return Binding::ForKey(k); };
+    const Binding leftClick = Binding::ForMouse(CnaEngine::Input::MouseButton::Left);
+    actions_.pause = action("Pause", {key(Keys::Escape), Binding::ForButton(Buttons::Start)});
+    actions_.help = action("Help", {key(Keys::F1), key(Keys::H)});
+    actions_.stats = action("Statistics", {key(Keys::F3)});
+    actions_.fly = action("FreeFlight", {key(Keys::F6)});
+    actions_.debugOverlay = action("DebugOverlay", {key(Keys::F4)});
+    actions_.map = action("Map", {key(Keys::Tab), Binding::ForButton(Buttons::Y)});
+    actions_.minimap = action("Minimap", {key(Keys::M)});
+    actions_.mute = action("Mute", {key(Keys::F2)});
+    actions_.screenshot = action("Screenshot", {key(Keys::F12)});
+    actions_.fullscreen = action("FullScreen", {key(Keys::F11)});
+    actions_.respawn = action("BackToEntrance", {key(Keys::R)});
+    actions_.mouseFaster = action("MouseFaster", {key(Keys::OemCloseBrackets)});
+    actions_.mouseSlower = action("MouseSlower", {key(Keys::OemOpenBrackets)});
+    actions_.volumeUp = action("VolumeUp", {key(Keys::OemPlus), key(Keys::Add)});
+    actions_.volumeDown = action("VolumeDown", {key(Keys::OemMinus), key(Keys::Subtract)});
+    actions_.clockStop = action("StopClock", {key(Keys::Space)});
+    actions_.speed1 = action("Speed1", {key(Keys::D1)});
+    actions_.speed2 = action("Speed2", {key(Keys::D2)});
+    actions_.speed5 = action("Speed5", {key(Keys::D3)});
+    actions_.speed10 = action("Speed10", {key(Keys::D4)});
+    actions_.speed30 = action("Speed30", {key(Keys::D5)});
+    actions_.clockBack = action("ClockBack", {key(Keys::OemComma)});
+    actions_.clockForward = action("ClockForward", {key(Keys::OemPeriod)});
+    actions_.nextPhase = action("NextPhase", {key(Keys::N)});
+    actions_.bell = action("Bell", {key(Keys::B)});
+    actions_.drill = action("FireDrill", {key(Keys::F)});
+    actions_.announce = action("Announcement", {key(Keys::P)});
+    actions_.weather = action("Weather", {key(Keys::O)});
+    actions_.quit = action("Quit", {key(Keys::Q)});              // while paused
+    actions_.resume = action("Resume", {leftClick});             // while paused
+    actions_.use = action("Use", {key(Keys::E), leftClick, Binding::ForButton(Buttons::A)});
 }
 
 SchoolGame::~SchoolGame() = default;
@@ -327,7 +372,7 @@ void SchoolGame::Announce()
 
 void SchoolGame::HandleSystemKeys()
 {
-    if (input_.Pressed(Keys::Escape) || input_.PadPressed(&GamePadButtons::getStartProperty)) {
+    if (controls_.Pressed(actions_.pause)) {
         if (bigMap_) {
             bigMap_ = false;
             ApplyMouseMode();
@@ -335,9 +380,9 @@ void SchoolGame::HandleSystemKeys()
             SetPaused(!paused_);
         }
     }
-    if (input_.Pressed(Keys::F1) || input_.Pressed(Keys::H)) showHelp_ = !showHelp_;
-    if (input_.Pressed(Keys::F3)) showStats_ = !showStats_;
-    if (input_.Pressed(Keys::F6)) {
+    if (controls_.Pressed(actions_.help)) showHelp_ = !showHelp_;
+    if (controls_.Pressed(actions_.stats)) showStats_ = !showStats_;
+    if (controls_.Pressed(actions_.fly)) {
         player_->SetFlying(!player_->Flying());
         if (!player_->Flying()) {
             // Back on the ground: drop to the floor under the camera.
@@ -347,18 +392,18 @@ void SchoolGame::HandleSystemKeys()
         }
         hud_->Toast(player_->Flying() ? "Free flight (debug): W flies where you look" : "Back on the ground", 2.0f);
     }
-    if (input_.Pressed(Keys::F4)) {
+    if (controls_.Pressed(actions_.debugOverlay)) {
         debugMode_ = (debugMode_ + 1) % 4;
         static const char* names[] = {"Debug overlays off", "Debug: NPC paths and fidelity", "Debug: room bounds and navigation nodes", "Debug: collision boxes"};
         hud_->Toast(names[debugMode_], 1.5f);
     }
-    if (input_.Pressed(Keys::Tab) || input_.PadPressed(&GamePadButtons::getYProperty)) {
+    if (controls_.Pressed(actions_.map)) {
         bigMap_ = !bigMap_;
         ApplyMouseMode();
     }
-    if (input_.Pressed(Keys::M)) showMinimap_ = !showMinimap_;
-    if (input_.Pressed(Keys::F2)) audio_->SetMuted(!audio_->Muted());
-    if (input_.Pressed(Keys::F12)) {
+    if (controls_.Pressed(actions_.minimap)) showMinimap_ = !showMinimap_;
+    if (controls_.Pressed(actions_.mute)) audio_->SetMuted(!audio_->Muted());
+    if (controls_.Pressed(actions_.screenshot)) {
         static int shotIndex = 0;
         char name[64];
         std::snprintf(name, sizeof name, "school-%s-%03d.png", School::ClockText(sim_->Time()).c_str(), ++shotIndex);
@@ -367,7 +412,7 @@ void SchoolGame::HandleSystemKeys()
         pendingShot_ = name;
         hud_->Toast(std::string("Screenshot ") + name, 2.0f);
     }
-    if (input_.Pressed(Keys::F11)) {
+    if (controls_.Pressed(actions_.fullscreen)) {
         graphics_.ToggleFullScreen();
         const auto& vp = getGraphicsDeviceProperty().getViewportProperty();
         if (player_->MouseCaptured()) {
@@ -375,40 +420,40 @@ void SchoolGame::HandleSystemKeys()
             player_->SetMouseCaptured(true, vp.getWidthProperty(), vp.getHeightProperty());
         }
     }
-    if (input_.Pressed(Keys::R)) {
+    if (controls_.Pressed(actions_.respawn)) {
         ResetToEntrance();
         hud_->Toast("Back at the entrance");
         if (paused_) SetPaused(false);
     }
-    if (input_.Pressed(Keys::OemCloseBrackets)) sensitivityScale_ = std::min(4.0f, sensitivityScale_ * 1.15f);
-    if (input_.Pressed(Keys::OemOpenBrackets)) sensitivityScale_ = std::max(0.2f, sensitivityScale_ / 1.15f);
-    if (input_.Pressed(Keys::OemPlus) || input_.Pressed(Keys::Add)) audio_->SetMasterVolume(audio_->MasterVolume() + 0.1f);
-    if (input_.Pressed(Keys::OemMinus) || input_.Pressed(Keys::Subtract)) audio_->SetMasterVolume(audio_->MasterVolume() - 0.1f);
+    if (controls_.Pressed(actions_.mouseFaster)) sensitivityScale_ = std::min(4.0f, sensitivityScale_ * 1.15f);
+    if (controls_.Pressed(actions_.mouseSlower)) sensitivityScale_ = std::max(0.2f, sensitivityScale_ / 1.15f);
+    if (controls_.Pressed(actions_.volumeUp)) audio_->SetMasterVolume(audio_->MasterVolume() + 0.1f);
+    if (controls_.Pressed(actions_.volumeDown)) audio_->SetMasterVolume(audio_->MasterVolume() - 0.1f);
     player_->GetSettings().mouseSensitivity = options_.mouseSensitivity * sensitivityScale_;
 
     if (!paused_) {
-        if (input_.Pressed(Keys::Space)) SetTimeScale(timePaused_ ? std::max(1.0f, timeScale_) : 0.0f);
-        if (input_.Pressed(Keys::D1)) SetTimeScale(1.0f);
-        if (input_.Pressed(Keys::D2)) SetTimeScale(2.0f);
-        if (input_.Pressed(Keys::D3)) SetTimeScale(5.0f);
-        if (input_.Pressed(Keys::D4)) SetTimeScale(10.0f);
-        if (input_.Pressed(Keys::D5)) SetTimeScale(30.0f);
-        if (input_.Pressed(Keys::OemComma) || input_.Pressed(Keys::OemPeriod)) {
-            const double delta = input_.Pressed(Keys::OemPeriod) ? 900.0 : -900.0;
+        if (controls_.Pressed(actions_.clockStop)) SetTimeScale(timePaused_ ? std::max(1.0f, timeScale_) : 0.0f);
+        if (controls_.Pressed(actions_.speed1)) SetTimeScale(1.0f);
+        if (controls_.Pressed(actions_.speed2)) SetTimeScale(2.0f);
+        if (controls_.Pressed(actions_.speed5)) SetTimeScale(5.0f);
+        if (controls_.Pressed(actions_.speed10)) SetTimeScale(10.0f);
+        if (controls_.Pressed(actions_.speed30)) SetTimeScale(30.0f);
+        if (controls_.Pressed(actions_.clockBack) || controls_.Pressed(actions_.clockForward)) {
+            const double delta = controls_.Pressed(actions_.clockForward) ? 900.0 : -900.0;
             sim_->JumpToTime(std::clamp(sim_->Time() + delta, 0.0, 86399.0));
             (void)sim_->TakeBells();
             lastPhase_ = sim_->PhaseIndex();
             hud_->Toast("Clock set to " + School::ClockText(sim_->Time()), 1.5f);
         }
-        if (input_.Pressed(Keys::N)) {
+        if (controls_.Pressed(actions_.nextPhase)) {
             sim_->SkipToNextPhase(true);
             hud_->Toast("Skipped to " + PhaseLabel(sim_->Schedule(), sim_->PhaseIndex()) + " at " + School::ClockText(sim_->Time()), 2.5f);
         }
-        if (input_.Pressed(Keys::B)) {
+        if (controls_.Pressed(actions_.bell)) {
             schoolAudio_->Bell(false);
             bellFlash_ = 1.0f;
         }
-        if (input_.Pressed(Keys::F)) {
+        if (controls_.Pressed(actions_.drill)) {
             if (sim_->Drill().active) {
                 sim_->EndDrill();
                 hud_->Toast("Fire drill ended: everybody returns to the timetable", 3.0f);
@@ -417,8 +462,8 @@ void SchoolGame::HandleSystemKeys()
                 hud_->Toast("FIRE DRILL: the alarm sounds, everybody walks to the assembly points", 4.0f);
             }
         }
-        if (input_.Pressed(Keys::P)) Announce();
-        if (input_.Pressed(Keys::O)) {
+        if (controls_.Pressed(actions_.announce)) Announce();
+        if (controls_.Pressed(actions_.weather)) {
             static const char* kinds[] = {"clear", "rain", "snow", "fog"};
             int k = 0;
             for (int i = 0; i < 4; ++i)
@@ -430,8 +475,8 @@ void SchoolGame::HandleSystemKeys()
         }
     }
     if (paused_) {
-        if (input_.Pressed(Keys::Q)) Exit();
-        if (input_.LeftClicked()) SetPaused(false);
+        if (controls_.Pressed(actions_.quit)) Exit();
+        if (controls_.Pressed(actions_.resume)) SetPaused(false);
     }
 }
 
@@ -799,6 +844,7 @@ void SchoolGame::Update(GameTime& gameTime)
     if (options_.fixedTimeStep > 0.0f) dt = options_.fixedTimeStep;
     ++frame_;
     input_.Update();
+    controls_.Update(input_.Snapshot());
     NoteFrameTime("input", updateStart);
     UpdateFrameStats(dt);
     HandleSystemKeys();
@@ -843,7 +889,7 @@ void SchoolGame::Update(GameTime& gameTime)
         const std::optional<float> wall = collision_->Raycast(camera_.ViewRay(), 4.0f, player_->Level());
         interaction_.Focus(camera_.ViewRay(), 6.0f, wall.value_or(1e9f));
         focusPrompt_ = interaction_.FocusedPrompt();
-        if (!bigMap_ && (input_.Pressed(Keys::E) || input_.LeftClicked() || input_.PadPressed(&GamePadButtons::getAProperty))) {
+        if (!bigMap_ && controls_.Pressed(actions_.use)) {
             if (interaction_.Activate()) {
                 schoolAudio_->Click();
                 UpdateInteractables();
