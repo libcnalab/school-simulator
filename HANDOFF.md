@@ -59,6 +59,7 @@ were byte-identical to the step before, on Mesa llvmpipe and on the Radeon 780M 
 | facade, rooms and glass | `RenderQueue`, `ForwardRenderer`, stock binder (`Material::frontFace`, `straightAlpha`); doors, cabs and lamps stay game draws between opaque items and glass |
 | system keys and "use" | `ActionMap` (real X11 input checked: F3, M, F12, Tab, F1, Esc, Q) |
 | texture cache | `AssetRegistry` |
+| mip chains (branch `engine-shared`, SHARE-001) | `Graphics::Image`, `UploadTexture`; `ImageUtil` removed (checked on llvmpipe; cna-engine's image probe compares a frozen copy of it level by level) |
 
 Not moved: walking and looking (`PlayerController` reads analog sticks and relative mouse motion itself), people, sky,
 weather, particles, screens, audio, the F3 frame-rate average (a half-second block average, also shown on the IT-room
