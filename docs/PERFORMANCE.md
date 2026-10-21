@@ -67,3 +67,9 @@ culled ..` shows the effect.
 
 `tools/determinism.sh`: two runs with `--fixed-step 0.05` reach the same digest (`SchoolSim::Digest`, a hash
 of every position) and byte-identical screenshots on OPENGLES3.
+
+With `--fixed-step` the pictures depend on the frame count only: rooms are built `buildsPerFrame` at a time without
+the 6 ms wall-clock budget, and room lights fade by the fixed step. Without that, which rooms a frame had built
+depended on how fast the machine was, and a night view with lights fading in differed between two runs. The script
+now fails when the pictures differ. The tour's 17 places plus two views with the HUD (one at night in rain), each
+run twice as fixed-step runs, are byte-identical on Mesa llvmpipe.

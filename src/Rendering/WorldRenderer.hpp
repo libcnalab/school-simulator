@@ -74,6 +74,9 @@ public:
     bool portalCulling = true;
     int maxLoaded = 240;
     int buildsPerFrame = 3;
+    /** Stop building for this frame after 6 ms. Off for fixed-step runs: what is built by a frame then depends on
+     *  the frame count only, not on how fast the machine is (deterministic captures). */
+    bool buildTimeBudget = true;
 
 private:
     struct Batch {

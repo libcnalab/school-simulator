@@ -160,6 +160,7 @@ void SchoolGame::LoadContent()
     services_.sky = sky_.get();
     services_.timeOfDay = &timeOfDay_;
     world_ = std::make_unique<WorldRenderer>(services_, plan_, *layouts_);
+    world_->buildTimeBudget = options_.fixedTimeStep <= 0.0f;
     npcs_ = std::make_unique<NpcRenderer>(services_);
     weather_ = std::make_unique<Weather>(services_);
     weather_->SetKind(options_.weather);
@@ -985,7 +986,9 @@ void SchoolGame::Draw(const GameTime& gameTime)
         const bool open = sim_->Schedule().At(sim_->PhaseIndex()).kind != School::PhaseKind::Night;
         const bool dim = day < 0.55f;
         if (roomLight_.size() != plan_.rooms.size()) roomLight_.assign(plan_.rooms.size(), 1.0f);
-        const float dt = std::min(0.1f, static_cast<float>(gameTime.getElapsedGameTimeProperty().getTotalMillisecondsProperty()) / 1000.0f);
+        const float dt = options_.fixedTimeStep > 0.0f
+                             ? options_.fixedTimeStep
+                             : std::min(0.1f, static_cast<float>(gameTime.getElapsedGameTimeProperty().getTotalMillisecondsProperty()) / 1000.0f);
         for (const RoomId id : world_->LoadedRooms()) {
             const Room& r = plan_.room(id);
             if (!r.Indoor()) continue;

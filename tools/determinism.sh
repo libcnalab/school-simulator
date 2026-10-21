@@ -12,5 +12,6 @@ run() {
 a=$(run a); b=$(run b)
 echo "run a: $a"; echo "run b: $b"
 if [ "$a" != "$b" ] || [ -z "$a" ]; then echo "DETERMINISM FAILED: digests differ"; exit 1; fi
-if cmp -s build/shots/det_a.png build/shots/det_b.png; then echo "pictures identical"; else echo "note: pictures differ (frame timing of the renderer), digests match"; fi
+if ! cmp -s build/shots/det_a.png build/shots/det_b.png; then echo "DETERMINISM FAILED: pictures differ"; exit 1; fi
+echo "pictures identical"
 echo "DETERMINISM PASSED"
