@@ -17,6 +17,7 @@
 #include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
 #include "Microsoft/Xna/Framework/MathHelper.hpp"
 #include "Microsoft/Xna/Framework/Rectangle.hpp"
+#include "CnaEngine/Graphics/Camera.hpp"
 #include "Rendering/EffectBank.hpp"
 #include "Rendering/RenderStates.hpp"
 #include "Rendering/TextureLibrary.hpp"
@@ -434,8 +435,11 @@ void Screens::RenderOffscreen(GraphicsDevice& device, EffectBank& fx, SkyDome& s
     RenderTarget2D* rt = cameraTargets_[static_cast<std::size_t>(index)].get();
     device.SetRenderTarget(rt);
     device.Clear(ClearOptions::Target | ClearOptions::DepthBuffer, Color(0, 0, 0, 255), 1.0f, 0);
-    const Matrix view = Matrix::CreateLookAt(cam.eye, cam.target, Vector3::Up);
-    const Matrix proj = Matrix::CreatePerspectiveFieldOfView(MathHelper::ToRadians(62.0f), static_cast<float>(kCamW) / static_cast<float>(kCamH), 0.2f, 220.0f);
+    CnaEngine::Graphics::Camera camera;
+    camera.SetLookAt(cam.eye, cam.target, Vector3::Up);
+    camera.SetPerspective(MathHelper::ToRadians(62.0f), static_cast<float>(kCamW) / static_cast<float>(kCamH), 0.2f, 220.0f);
+    const Matrix& view = camera.View();
+    const Matrix& proj = camera.Projection();
     const SceneView sv(view, proj, cam.eye);
     DrawContext ctx{device, fx, sv, time, true};
     fx.SetCamera(view, proj);

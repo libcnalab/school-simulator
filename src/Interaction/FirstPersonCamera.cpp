@@ -11,11 +11,29 @@ namespace {
 constexpr float kMaxPitch = 1.5f;  // just short of straight up/down so LookAt stays well defined
 }
 
+FirstPersonCamera::FirstPersonCamera()
+{
+    camera_.SetPerspective(fov_, aspect_, near_, far_);
+    SyncPose();
+}
+
 void FirstPersonCamera::SetPose(const Vector3& eye, float yaw, float pitch)
 {
     position_ = eye;
     yaw_ = MathHelper::WrapAngle(yaw);
     pitch_ = std::clamp(pitch, -kMaxPitch, kMaxPitch);
+    SyncPose();
+}
+
+void FirstPersonCamera::SetPosition(const Vector3& eye)
+{
+    position_ = eye;
+    SyncPose();
+}
+
+void FirstPersonCamera::SyncPose()
+{
+    camera_.SetLookAt(position_, position_ + Forward(), Vector3::Up);
 }
 
 void FirstPersonCamera::SetLens(float verticalFov, float aspectRatio, float nearPlane, float farPlane)
@@ -24,6 +42,7 @@ void FirstPersonCamera::SetLens(float verticalFov, float aspectRatio, float near
     aspect_ = aspectRatio;
     near_ = nearPlane;
     far_ = farPlane;
+    camera_.SetPerspective(fov_, aspect_, near_, far_);
 }
 
 void FirstPersonCamera::Rotate(float deltaYaw, float deltaPitch)
@@ -50,14 +69,4 @@ Vector3 FirstPersonCamera::GroundForward() const
 Ray FirstPersonCamera::ViewRay() const
 {
     return Ray(position_, Forward());
-}
-
-Matrix FirstPersonCamera::View() const
-{
-    return Matrix::CreateLookAt(position_, position_ + Forward(), Vector3::Up);
-}
-
-Matrix FirstPersonCamera::Projection() const
-{
-    return Matrix::CreatePerspectiveFieldOfView(fov_, aspect_, near_, far_);
 }
