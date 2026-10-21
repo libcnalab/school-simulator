@@ -19,7 +19,6 @@
 #include "Microsoft/Xna/Framework/Input/Keys.hpp"
 #include "Microsoft/Xna/Framework/MathHelper.hpp"
 #include "Rendering/AssetPaths.hpp"
-#include "Rendering/ImageUtil.hpp"
 #include "Rendering/RenderStates.hpp"
 #include "Rendering/RoomGeometry.hpp"
 #include "Simulation/Schedule.hpp"

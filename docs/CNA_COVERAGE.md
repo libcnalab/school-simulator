@@ -11,7 +11,7 @@ What the school uses, and where. The simulation half uses nothing from CNA by de
 | `DynamicVertexBuffer` with `SetDataOptions::Discard` | `NpcRenderer`, `SkyDome`, `ParticleRenderer` |
 | `DrawIndexedPrimitives`, `DrawUserPrimitives` | meshes; sky billboards, screen quads, debug lines |
 | `BlendState`, `DepthStencilState`, `RasterizerState::CullClockwise`, `SamplerState` | `RenderStates.hpp` |
-| `Texture2D` with CPU mip chains (`SetData` per level) | `TextureLibrary`, `ImageUtil` |
+| `Texture2D` with CPU mip chains (`SetData` per level) | `TextureLibrary` (through cna-engine's `Graphics/Image.hpp`) |
 | `RenderTarget2D` (colour + Depth24 for cameras, colour only for signage, boards, plates, diagnostics), `SetRenderTarget` | `Rendering/Screens.cpp` |
 | `BasicEffect` lit with alpha (translucent glassware), `PreferPerPixelLighting` with specular (the art still life), two directional lights, `Matrix::CreateRotationX/Y/Z` hierarchies | `Rendering/RoomEffects.cpp`, `NpcRenderer.cpp` |
 | `BlendState::Additive` billboards and ground quads with `DrawUserPrimitives` (lamp glow at night, sun and stars) | `WorldRenderer::DrawLamps`, `SkyDome` |

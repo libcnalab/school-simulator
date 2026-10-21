@@ -3,10 +3,9 @@
 #include <filesystem>
 #include <system_error>
 
-#include <vector>
-
 #include "App/Log.hpp"
-#include "Rendering/ImageUtil.hpp"
+
+#include "CnaEngine/Graphics/Image.hpp"
 
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
@@ -18,21 +17,20 @@ TextureLibrary::TextureLibrary(GraphicsDevice& device, Content::ContentManager& 
     const Color white = Color::White;
     white_->SetData(&white, 1);
 
-    std::vector<Color> checker(64 * 64);
+    CnaEngine::Graphics::Image checker(64, 64);
     for (int y = 0; y < 64; ++y)
         for (int x = 0; x < 64; ++x)
-            checker[static_cast<std::size_t>(y * 64 + x)] = (((x / 8) + (y / 8)) % 2 == 0) ? Color(255, 0, 255, 255) : Color(20, 20, 20, 255);
-    missingTexture_ = ImageUtil::CreateMipmapped(device_, checker, 64, 64);
+            checker.Set(x, y, (((x / 8) + (y / 8)) % 2 == 0) ? Color(255, 0, 255, 255) : Color(20, 20, 20, 255));
+    missingTexture_ = CnaEngine::Graphics::UploadTexture(device_, checker);
 
     // Short texture names and run-time labels, used verbatim.
     textures_.SetNormalizeKeys(false);
     textures_.RegisterLoader<Texture2D>([this](const std::string& name) {
+        // Content textures arrive with one level; the engine builds the rest on the CPU.
         Texture2D loaded = content_.Load<Texture2D>("Textures/" + name);
-        const int w = loaded.getWidthProperty();
-        const int h = loaded.getHeightProperty();
-        std::vector<Color> pixels(static_cast<std::size_t>(w) * static_cast<std::size_t>(h));
-        loaded.GetData(pixels.data(), static_cast<int>(pixels.size()));
-        return std::shared_ptr<Texture2D>(ImageUtil::CreateMipmapped(device_, pixels, w, h));
+        CnaEngine::Graphics::Image image(loaded.getWidthProperty(), loaded.getHeightProperty());
+        loaded.GetData(image.Bytes().data(), static_cast<int>(image.Bytes().size()));
+        return std::shared_ptr<Texture2D>(CnaEngine::Graphics::UploadTexture(device_, image));
     });
     textures_.SetFallback<Texture2D>(missingTexture_);
 }
