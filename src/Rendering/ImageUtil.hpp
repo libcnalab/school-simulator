@@ -23,7 +23,4 @@ std::unique_ptr<Microsoft::Xna::Framework::Graphics::Texture2D>
 CreateFromMipChain(Microsoft::Xna::Framework::Graphics::GraphicsDevice& device,
                    const std::vector<std::vector<Microsoft::Xna::Framework::Color>>& chain, int width, int height);
 
-/** Writes an uncompressed RGBA PNG. Returns false when the file cannot be written. */
-bool WritePng(const char* path, const Microsoft::Xna::Framework::Color* pixels, int width, int height);
-
 }  // namespace ImageUtil

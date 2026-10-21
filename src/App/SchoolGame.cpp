@@ -10,6 +10,7 @@
 
 #include "App/Log.hpp"
 #include "CNA/GraphicsCapability.hpp"
+#include "CnaEngine/Graphics/ScreenCapture.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Graphics/ClearOptions.hpp"
 #include "Microsoft/Xna/Framework/Graphics/DepthFormat.hpp"
@@ -1132,18 +1133,11 @@ void SchoolGame::Draw(const GameTime& gameTime)
 
 void SchoolGame::SaveScreenshot(const std::string& path)
 {
-    GraphicsDevice& device = getGraphicsDeviceProperty();
-    const PresentationParameters& pp = device.getPresentationParametersProperty();
-    const int w = pp.getBackBufferWidthProperty();
-    const int h = pp.getBackBufferHeightProperty();
-    std::vector<Color> pixels(static_cast<std::size_t>(w) * static_cast<std::size_t>(h));
-    try {
-        device.GetBackBufferData(pixels.data(), static_cast<int>(pixels.size()));
-        if (ImageUtil::WritePng(path.c_str(), pixels.data(), w, h)) School::Log("screenshot", "wrote %s (%dx%d)", path.c_str(), w, h);
-        else School::Log("screenshot", "cannot write %s", path.c_str());
-    } catch (const std::exception& e) {
-        School::Log("screenshot", "back buffer read failed: %s", e.what());
-    }
+    // Opaque: the back buffer's alpha is whatever the glass blending left there.
+    const CnaEngine::Graphics::CaptureResult shot =
+        CnaEngine::Graphics::CaptureBackBuffer(getGraphicsDeviceProperty(), {.path = path, .opaque = true});
+    if (shot.success) School::Log("screenshot", "wrote %s (%dx%d)", path.c_str(), shot.width, shot.height);
+    else School::Log("screenshot", "%s", shot.error.c_str());
 }
 
 // Test scripting (--script "a;b;c"). Steps run one per frame unless they wait:
