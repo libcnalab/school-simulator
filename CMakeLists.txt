@@ -80,6 +80,9 @@ if(SCHOOL_BUILD_APP)
     set(CNA_CNAEXT      ON    CACHE BOOL   "Build CNA's graphics extensions")
     set(CNA_DEVICES     OFF   CACHE BOOL   "Build CNA's device extensions")
     set(CNA_DIAGNOSTICS STATS CACHE STRING "CNA diagnostics level (OFF|STATS|FULL)")
+    # cna-engine links CNA's static module libraries; a shared CNA would put a second copy of CNA into the
+    # process (cna-engine upstream-issues.md, UP-006), so CNA is built statically.
+    set(CNA_SHARED_LIBRARY OFF CACHE BOOL "Build CNA as one shared library" FORCE)
     set(EASYGL_BUILD_TESTS    OFF CACHE BOOL "Build easy-gl tests")
     set(EASYGL_BUILD_EXAMPLES OFF CACHE BOOL "Build easy-gl examples")
     set(METAGL_BUILD_TESTS    OFF CACHE BOOL "Build meta-gl tests")
@@ -99,6 +102,23 @@ if(SCHOOL_BUILD_APP)
 
     add_subdirectory("${CNA_ROOT_DIR}" cna EXCLUDE_FROM_ALL)
 
+    # cna-engine's strict modules (CnaEngine::Core, CnaEngine::Graphics) over the CNA just added: XNA 4.0 types only.
+    # A new compiler warning inside the engine must not break this build.
+    set(CNA_ENGINE_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/../cna-engine" CACHE PATH "Path to the cna-engine checkout")
+    if(NOT EXISTS "${CNA_ENGINE_ROOT}/CMakeLists.txt")
+        message(FATAL_ERROR
+            "school-simulator: cna-engine not found at '${CNA_ENGINE_ROOT}'.\n"
+            "Clone it next to this project or pass -DCNA_ENGINE_ROOT=/path/to/cna-engine.")
+    endif()
+    set(CNA_ENGINE_BUILD_TESTS            OFF CACHE BOOL "" FORCE)
+    set(CNA_ENGINE_BUILD_EXAMPLES         OFF CACHE BOOL "" FORCE)
+    set(CNA_ENGINE_WITH_EXTENDED          OFF CACHE BOOL "" FORCE)
+    set(CNA_ENGINE_WITH_ENHANCED_GRAPHICS OFF CACHE BOOL "" FORCE)
+    set(CNA_ENGINE_INSTALL                OFF CACHE BOOL "" FORCE)
+    set(CNA_ENGINE_PILOT_PROBES           OFF CACHE BOOL "" FORCE)
+    set(CNA_ENGINE_WARNINGS_AS_ERRORS     OFF CACHE BOOL "" FORCE)
+    add_subdirectory("${CNA_ENGINE_ROOT}" cna_engine EXCLUDE_FROM_ALL)
+
     file(GLOB_RECURSE SCHOOL_APP_SOURCES CONFIGURE_DEPENDS
         "${CMAKE_CURRENT_SOURCE_DIR}/src/Rendering/*.cpp"
         "${CMAKE_CURRENT_SOURCE_DIR}/src/Scene/*.cpp"
@@ -109,7 +129,7 @@ if(SCHOOL_BUILD_APP)
 
     add_library(school_app STATIC ${SCHOOL_APP_SOURCES})
     target_include_directories(school_app PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")
-    target_link_libraries(school_app PUBLIC school_sim CNA)
+    target_link_libraries(school_app PUBLIC school_sim CNA CnaEngine::Graphics)
 
     # CNA's and sharp-runtime's public headers are not warning-clean under -Wextra/-Wpedantic,
     # so their include directories are passed as -isystem.
@@ -119,7 +139,8 @@ if(SCHOOL_BUILD_APP)
         file(GLOB _school_system_includes
             "${CNA_ROOT_DIR}/modules/*/include"
             "${CNA_ROOT_DIR}/modules/renderers/*/include"
-            "${CNA_ROOT_DIR}/../sharp-runtime/modules/*/include")
+            "${CNA_ROOT_DIR}/../sharp-runtime/modules/*/include"
+            "${CNA_ENGINE_ROOT}/include")
         foreach(_dir IN LISTS _school_system_includes)
             target_compile_options(school_app PRIVATE "SHELL:-isystem ${_dir}")
         endforeach()
