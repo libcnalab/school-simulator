@@ -2,7 +2,6 @@
 
 #include "Microsoft/Xna/Framework/Graphics/BufferUsage.hpp"
 #include "Microsoft/Xna/Framework/Graphics/IndexElementSize.hpp"
-#include "Microsoft/Xna/Framework/Graphics/PrimitiveType.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionNormalTexture.hpp"
 
 using namespace Microsoft::Xna::Framework;
@@ -22,13 +21,14 @@ LitMesh::LitMesh(GraphicsDevice& device, const MeshBuilder& builder)
     indexBuffer_ = std::make_unique<IndexBuffer>(device, IndexElementSize::SixteenBits,
                                                  static_cast<int>(builder.Indices().size()), BufferUsage::WriteOnly);
     indexBuffer_->SetData(builder.Indices().data(), static_cast<int>(builder.Indices().size()));
+    using CnaEngine::Graphics::VertexAttribute;
+    gpu_ = CnaEngine::Graphics::GpuMesh::Borrow(*vertexBuffer_, *indexBuffer_, vertexCount_, triangles_, bounds_,
+                                                {VertexAttribute::Position, VertexAttribute::Normal, VertexAttribute::TexCoord0});
 }
 
 void LitMesh::Draw(GraphicsDevice& device) const
 {
-    device.SetVertexBuffer(vertexBuffer_.get());
-    device.setIndicesProperty(indexBuffer_.get());
-    device.DrawIndexedPrimitives(PrimitiveType::TriangleList, 0, 0, vertexCount_, 0, triangles_);
+    gpu_.Draw(device);
 }
 
 Shapes::Shapes(GraphicsDevice& device)

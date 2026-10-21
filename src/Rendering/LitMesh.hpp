@@ -10,6 +10,8 @@
 #include "Microsoft/Xna/Framework/Graphics/VertexBuffer.hpp"
 #include "Rendering/MeshBuilder.hpp"
 
+#include "CnaEngine/Graphics/GpuMesh.hpp"
+
 /**
  * An indexed triangle list with normals and texture coordinates
  * (VertexPositionNormalTexture), for objects lit at draw time by BasicEffect.
@@ -25,6 +27,8 @@ public:
     [[nodiscard]] int VertexCount() const { return vertexCount_; }
     [[nodiscard]] Microsoft::Xna::Framework::Graphics::VertexBuffer* Vertices() const { return vertexBuffer_.get(); }
     [[nodiscard]] Microsoft::Xna::Framework::Graphics::IndexBuffer* Indices() const { return indexBuffer_.get(); }
+    /** The buffers as cna-engine's mesh (borrowed: this object owns them). */
+    [[nodiscard]] const CnaEngine::Graphics::GpuMesh& Gpu() const { return gpu_; }
 
 private:
     std::unique_ptr<Microsoft::Xna::Framework::Graphics::VertexBuffer> vertexBuffer_;
@@ -32,6 +36,7 @@ private:
     Microsoft::Xna::Framework::BoundingBox bounds_;
     int vertexCount_ = 0;
     int triangles_ = 0;
+    CnaEngine::Graphics::GpuMesh gpu_;
 };
 
 /** The handful of primitive shapes several exhibits share, created once. All are unit sized. */

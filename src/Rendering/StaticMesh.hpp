@@ -10,6 +10,8 @@
 #include "Microsoft/Xna/Framework/Graphics/VertexBuffer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionColorTexture.hpp"
 
+#include "CnaEngine/Graphics/GpuMesh.hpp"
+
 /** An immutable indexed triangle list living in GPU buffers. The effect is applied by the caller. */
 class StaticMesh {
 public:
@@ -21,6 +23,8 @@ public:
     void Draw(Microsoft::Xna::Framework::Graphics::GraphicsDevice& device) const;
     [[nodiscard]] const Microsoft::Xna::Framework::BoundingBox& Bounds() const { return bounds_; }
     [[nodiscard]] int TriangleCount() const { return triangles_; }
+    /** The buffers as cna-engine's mesh (borrowed: this object owns them). */
+    [[nodiscard]] const CnaEngine::Graphics::GpuMesh& Gpu() const { return gpu_; }
 
 private:
     std::unique_ptr<Microsoft::Xna::Framework::Graphics::VertexBuffer> vertexBuffer_;
@@ -28,4 +32,5 @@ private:
     Microsoft::Xna::Framework::BoundingBox bounds_;
     int vertexCount_ = 0;
     int triangles_ = 0;
+    CnaEngine::Graphics::GpuMesh gpu_;
 };
