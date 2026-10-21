@@ -5,8 +5,8 @@ What the school uses, and where. The simulation half uses nothing from CNA by de
 | CNA area | Used by |
 |---|---|
 | `Game`, `GraphicsDeviceManager`, `GameTime`, `GameWindow` (title, resizing), `IsActive`, `Exit` | `App/SchoolGame.cpp` |
-| `GraphicsProfile::HiDef`, `PresentationParameters`, `GetBackBufferData` (screenshots) | `SchoolGame::SaveScreenshot` |
-| `BasicEffect` (vertex colour x texture, lit with directional lights, fog) | `Rendering/EffectBank.cpp`, world, doors, people, sky |
+| `GraphicsProfile::HiDef`, `PresentationParameters`, `GetBackBufferData` (screenshots) | `SchoolGame::SaveScreenshot` (through cna-engine's `CaptureBackBuffer`) |
+| `BasicEffect` (vertex colour x texture, lit with directional lights, fog) | `Rendering/EffectBank.cpp`, world (through cna-engine's stock binder), doors, people, sky |
 | `VertexBuffer`, `IndexBuffer` (16-bit), `VertexPositionColorTexture`, `VertexPositionNormalTexture` | `StaticMesh`, `LitMesh` |
 | `DynamicVertexBuffer` with `SetDataOptions::Discard` | `NpcRenderer`, `SkyDome`, `ParticleRenderer` |
 | `DrawIndexedPrimitives`, `DrawUserPrimitives` | meshes; sky billboards, screen quads, debug lines |

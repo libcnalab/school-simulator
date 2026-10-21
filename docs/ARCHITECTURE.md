@@ -47,6 +47,12 @@ detection. See `docs/NPC_SIMULATION.md`.
   chunk per wing, so the building is complete from outside while interiors stream in.
 - Every room is one static vertex-coloured mesh per texture (baked ceiling lights indoors, a baked sun
   outdoors modulated by the time of day at draw time); doors are the only moving parts of the architecture.
+- cna-engine draws the facade, the rooms and their glass: `WorldRenderer::Draw` culls (frustum, portals) and
+  submits each batch as a render item in its own order to the engine's `ForwardRenderer` (stock binder:
+  unlit, vertex colour x texture x tint, the world effect's fog; opaque geometry wound counter-clockwise,
+  glass two-sided with straight alpha). Doors, elevator cabs and lamp glows are drawn by the game in the
+  renderer's pass between the opaque items and the glass. The view's matrices come from the engine's
+  `Camera`, screenshots from its `CaptureBackBuffer`.
 - People: `NpcRenderer` walks every agent once per frame (cheap: `Observe` evaluates a walker analytically),
   drops those out of range, out of view or in unloaded rooms, and batches the rest as shaded boxes into one
   dynamic vertex buffer; detail depends on distance (10 boxes, 3, 2).

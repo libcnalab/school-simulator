@@ -2,8 +2,11 @@
 
 // The visible school: room interiors built lazily around the player and dropped again when far away,
 // the building's facade and roofs built once, and the door leaves drawn from the simulation's door
-// state every frame. Every mesh is static vertex-coloured geometry drawn through BasicEffect.
+// state every frame. Every mesh is static vertex-coloured geometry; cna-engine's forward renderer draws the
+// facade, the rooms and the glass, the game draws doors, elevators and lamps between its opaque and transparent items.
 
+#include <cstdint>
+#include <deque>
 #include <memory>
 #include <unordered_map>
 #include <unordered_set>
@@ -15,6 +18,10 @@
 #include "Rendering/StaticMesh.hpp"
 #include "Simulation/SchoolSim.hpp"
 #include "World/SchoolPlan.hpp"
+
+#include "CnaEngine/Graphics/ForwardRenderer.hpp"
+#include "CnaEngine/Graphics/Material.hpp"
+#include "CnaEngine/Graphics/RenderQueue.hpp"
 
 struct WorldStats {
     int roomsLoaded = 0;
@@ -110,7 +117,8 @@ private:
      *  nearby rooms (a safety margin), and windowed rooms when looking out. False = the eye is in no room: draw all. */
     bool ComputePortalVisibility(const DrawContext& ctx, const std::vector<School::DoorRuntime>& doors, std::vector<char>& seen) const;
     float DistanceTo(const School::Room& room, const Microsoft::Xna::Framework::Vector3& eye) const;
-    void DrawBatches(const DrawContext& ctx, const std::vector<Batch>& batches, bool transparent);
+    /** Queues `batches` as render items, unlit, vertex colours times texture, multiplied by `tint`. */
+    void Submit(const std::vector<Batch>& batches, const Microsoft::Xna::Framework::Vector3& tint, bool transparent);
     void DrawDoors(const DrawContext& ctx, const WorldLighting& light, const std::vector<School::DoorRuntime>& doors);
     void DrawElevators(const DrawContext& ctx, const std::vector<School::ElevatorStatus>& elevators);
     void DrawLamps(const DrawContext& ctx, const WorldLighting& light);
@@ -132,6 +140,10 @@ private:
     std::vector<int> groupOf_;   // per room, index into groups_ or -1
     std::vector<School::RoomId> buildQueue_;
     WorldStats stats_;
+    std::unique_ptr<CnaEngine::Graphics::ForwardRenderer> renderer_;
+    CnaEngine::Graphics::RenderQueue queue_;
+    std::deque<CnaEngine::Graphics::Material> frameMaterials_;   // this draw's materials; a deque keeps their addresses
+    std::int32_t nextOrder_ = 0;
     Microsoft::Xna::Framework::Vector3 lastEye_;
     int lastLevel_ = 1;
     float sinceScan_ = 1.0f;

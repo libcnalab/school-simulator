@@ -4,6 +4,7 @@
 #include <chrono>
 #include <cmath>
 #include <cstdlib>
+#include <string>
 
 #include "App/Log.hpp"
 #include "Microsoft/Xna/Framework/BoundingSphere.hpp"
@@ -18,6 +19,8 @@
 #include "Rendering/RenderStates.hpp"
 #include "Rendering/TextureLibrary.hpp"
 
+#include "CnaEngine/Graphics/Camera.hpp"
+
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
 using School::Door;
@@ -25,7 +28,8 @@ using School::DoorKind;
 using School::Room;
 using School::RoomId;
 
-WorldRenderer::WorldRenderer(Services& services, const School::SchoolPlan& plan, const School::LayoutCache& layouts) : s_(services), plan_(plan), layouts_(layouts)
+WorldRenderer::WorldRenderer(Services& services, const School::SchoolPlan& plan, const School::LayoutCache& layouts)
+    : s_(services), plan_(plan), layouts_(layouts), renderer_(std::make_unique<CnaEngine::Graphics::ForwardRenderer>(*services.device))
 {
     const auto t0 = std::chrono::steady_clock::now();
     const FacadeGeometry facade = BuildFacadeGeometry(plan);
@@ -324,15 +328,35 @@ void WorldRenderer::Update(const Vector3& eye, int level, float dt, const std::v
     stats_.roomsLoaded = static_cast<int>(rooms_.size());
 }
 
-void WorldRenderer::DrawBatches(const DrawContext& ctx, const std::vector<Batch>& batches, bool)
+void WorldRenderer::Submit(const std::vector<Batch>& batches, const Vector3& tint, bool transparent)
 {
-    BasicEffect& fx = ctx.fx.World();
+    // The world effect's look through the engine's stock binder: unlit, vertex colours times texture times `tint`.
+    // Opaque geometry is wound counter-clockwise (culled clockwise) and sampled anisotropically; glass is
+    // two-sided, sampled linearly and blended with straight alpha (XNA's NonPremultiplied).
+    using namespace CnaEngine::Graphics;
     for (const Batch& b : batches) {
-        fx.setTextureProperty(b.texture);
-        EffectBank::Apply(fx);
-        b.mesh->Draw(ctx.device);
-        stats_.trianglesDrawn += b.mesh->TriangleCount();
-        ++stats_.drawCalls;
+        Material& m = frameMaterials_.emplace_back();
+        m.name = transparent ? "world glass" : "world";
+        m.shading = ShadingModel::Unlit;
+        m.vertexColors = true;
+        m.baseTexture = b.texture;
+        m.diffuseColor = tint;
+        if (transparent) {
+            m.blend = BlendMode::AlphaBlend;
+            m.straightAlpha = true;
+            m.doubleSided = true;
+            m.sampler = &SamplerState::LinearWrap;
+        } else {
+            m.frontFace = FrontFace::CounterClockwise;
+            m.sampler = &SamplerState::AnisotropicWrap;
+        }
+        RenderItem item;
+        item.mesh = &b.mesh->Gpu();
+        item.material = &m;
+        item.bounds = BoundingSphere::CreateFromBoundingBox(b.mesh->Bounds());
+        // The game's drawing order: where depths are equal the later surface wins.
+        item.order = nextOrder_++;
+        queue_.Submit(item);
     }
 }
 
@@ -402,11 +426,13 @@ void WorldRenderer::Draw(const DrawContext& ctx, const WorldLighting& light, con
     fx.setViewProperty(ctx.view.view);
     fx.setProjectionProperty(ctx.view.projection);
     fx.setAlphaProperty(1.0f);
+    queue_.Clear();
+    frameMaterials_.clear();
+    nextOrder_ = 0;
 
     // Outdoors first (facade, ground, zones), tinted by the daylight.
-    fx.setDiffuseColorProperty(light.outdoorTint);
     for (const Chunk& c : facade_)
-        if (ctx.view.frustum.Intersects(c.bounds)) DrawBatches(ctx, c.opaque, false);
+        if (ctx.view.frustum.Intersects(c.bounds)) Submit(c.opaque, light.outdoorTint, false);
     std::vector<const LoadedRoom*> visible;
     std::vector<char> portal;
     const bool portalValid = portalCulling && ComputePortalVisibility(ctx, doors, portal);
@@ -426,7 +452,7 @@ void WorldRenderer::Draw(const DrawContext& ctx, const WorldLighting& light, con
     }
     for (const LoadedRoom* lr : visible)
         if (lr->outdoor) {
-            DrawBatches(ctx, lr->opaque, false);
+            Submit(lr->opaque, light.outdoorTint, false);
             ++stats_.roomsDrawn;
         }
     // Indoors: the baked lights are the room's own; a room whose lights are off keeps only the daylight from its windows.
@@ -444,26 +470,45 @@ void WorldRenderer::Draw(const DrawContext& ctx, const WorldLighting& light, con
             }
             const float dark = 0.12f + 0.5f * light.daylight;   // what a dark room looks like: daylight through the windows
             const float k = dark + (1.0f - dark) * on;
-            fx.setDiffuseColorProperty(Vector3(k, k, k * 1.03f));
-            DrawBatches(ctx, lr->opaque, false);
+            Submit(lr->opaque, Vector3(k, k, k * 1.03f), false);
             ++stats_.roomsDrawn;
         }
-    fx.setDiffuseColorProperty(Vector3(1, 1, 1));
-
-    DrawDoors(ctx, light, doors);
-    DrawElevators(ctx, elevators);
-
-    DrawLamps(ctx, light);
 
     // Glass last, without depth writes, so panes blend over what is behind them.
-    RenderStates::SetTransparent3D(device, BlendState::NonPremultiplied);
-    fx.setDiffuseColorProperty(light.outdoorTint);
     for (const Chunk& c : facade_)
-        if (!c.transparent.empty() && ctx.view.frustum.Intersects(c.bounds)) DrawBatches(ctx, c.transparent, true);
-    fx.setDiffuseColorProperty(Vector3(1, 1, 1));
+        if (!c.transparent.empty() && ctx.view.frustum.Intersects(c.bounds)) Submit(c.transparent, light.outdoorTint, true);
     for (const LoadedRoom* lr : visible)
-        if (!lr->transparent.empty()) DrawBatches(ctx, lr->transparent, true);
-    RenderStates::SetOpaque3D(device);
+        if (!lr->transparent.empty()) Submit(lr->transparent, Vector3(1, 1, 1), true);
+
+    // Doors, elevator cabs and lamp glows are the game's own draws, between the opaque items and the glass.
+    const std::string pass = "doors, elevators, lamps";
+    renderer_->AddPass(CnaEngine::Graphics::PassPoint::AfterOpaque, pass,
+                       [&](GraphicsDevice&, const CnaEngine::Graphics::Camera&, CnaEngine::Graphics::RenderStatistics&) {
+                           RenderStates::SetOpaque3D(device);
+                           fx.setDiffuseColorProperty(Vector3(1, 1, 1));
+                           DrawDoors(ctx, light, doors);
+                           DrawElevators(ctx, elevators);
+                           DrawLamps(ctx, light);
+                       });
+    struct PassRemoval {
+        CnaEngine::Graphics::ForwardRenderer& renderer;
+        const std::string& name;
+        ~PassRemoval() { renderer.RemovePass(name); }
+    } removal{*renderer_, pass};
+    CnaEngine::Graphics::Camera camera;
+    camera.SetMatrices(ctx.view.view, ctx.view.projection);
+    // The world effect's fog, as the game set it for this view (off for the CCTV cameras).
+    CnaEngine::Graphics::ForwardLighting& lighting = renderer_->Lighting();
+    lighting.fogEnabled = fx.getFogEnabledProperty();
+    lighting.fogColor = fx.getFogColorProperty();
+    lighting.fogStart = fx.getFogStartProperty();
+    lighting.fogEnd = fx.getFogEndProperty();
+    queue_.Sort(ctx.view.eye);
+    CnaEngine::Graphics::RenderStatistics drawn;
+    renderer_->Render(queue_, camera, &drawn);
+    stats_.drawCalls += static_cast<int>(drawn.drawCalls);
+    stats_.trianglesDrawn += static_cast<int>(drawn.primitives);
+    fx.setDiffuseColorProperty(Vector3(1, 1, 1));
 }
 
 void WorldRenderer::DrawDoors(const DrawContext& ctx, const WorldLighting& light, const std::vector<School::DoorRuntime>& doors)
