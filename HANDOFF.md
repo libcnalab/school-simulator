@@ -42,6 +42,28 @@ Working notes for whoever continues (human or agent). Dates are when something w
   Second round: light bake grid (room builds 5x faster), texture preload, shader warm-up, batched plate quads. Details in `docs/WEB_BUILD.md`.
   Not yet confirmed by the owner on the real GPU. Compile jobs: at most 2 (`tools/build.sh` default).
 
+## cna-engine adoption (2026-10-21, branch `engine-adoption`)
+
+The application uses cna-engine's strict modules (XNA 4.0 types only) beside a static CNA, built against the engine's
+compatibility baseline (CNA `900d0db3b`, Sharp Runtime `f2aecfef`, easy-gl `v0.1.1`). One commit per step; after every
+step the 19 fixed-step captures (the tour's 17 places without the HUD, the entrance with it, the lobby at night in rain)
+were byte-identical to the step before, on Mesa llvmpipe and on the Radeon 780M (`SDL_VIDEODRIVER=offscreen`):
+
+| Step | Engine facility |
+|---|---|
+| fixed-step runs draw the same picture (room builds by count, light fades by the fixed step) | none; makes the comparisons exact |
+| build | `CnaEngine::Core`, `CnaEngine::Graphics`; CNA static |
+| screenshots | `CaptureBackBuffer` (opaque; the files are compressed now, same pixels) |
+| view and projection | `Camera` (inside `FirstPersonCamera`, and the CCTV cameras) |
+| meshes | `GpuMesh` views of `StaticMesh`/`LitMesh` buffers |
+| facade, rooms and glass | `RenderQueue`, `ForwardRenderer`, stock binder (`Material::frontFace`, `straightAlpha`); doors, cabs and lamps stay game draws between opaque items and glass |
+| system keys and "use" | `ActionMap` (real X11 input checked: F3, M, F12, Tab, F1, Esc, Q) |
+| texture cache | `AssetRegistry` |
+
+Not moved: walking and looking (`PlayerController` reads analog sticks and relative mouse motion itself), people, sky,
+weather, particles, screens, audio, the F3 frame-rate average (a half-second block average, also shown on the IT-room
+monitors). Known difference: a press counts per action, so holding H and pressing F1 no longer toggles help twice.
+
 ## Build, run, test
 
 ```bash
