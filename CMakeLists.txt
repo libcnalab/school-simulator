@@ -102,8 +102,9 @@ if(SCHOOL_BUILD_APP)
 
     add_subdirectory("${CNA_ROOT_DIR}" cna EXCLUDE_FROM_ALL)
 
-    # cna-engine's strict modules (CnaEngine::Core, CnaEngine::Graphics) over the CNA just added: XNA 4.0 types only.
-    # A new compiler warning inside the engine must not break this build.
+    # cna-engine over the CNA just added: its strict modules (XNA 4.0 types only) for drawing and menus, and its enhanced
+    # graphics for shadow reception (CNA's shadow extension). A new compiler warning inside the engine must not break
+    # this build.
     set(CNA_ENGINE_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/../cna-engine" CACHE PATH "Path to the cna-engine checkout")
     if(NOT EXISTS "${CNA_ENGINE_ROOT}/CMakeLists.txt")
         message(FATAL_ERROR
@@ -113,7 +114,7 @@ if(SCHOOL_BUILD_APP)
     set(CNA_ENGINE_BUILD_TESTS            OFF CACHE BOOL "" FORCE)
     set(CNA_ENGINE_BUILD_EXAMPLES         OFF CACHE BOOL "" FORCE)
     set(CNA_ENGINE_WITH_EXTENDED          OFF CACHE BOOL "" FORCE)
-    set(CNA_ENGINE_WITH_ENHANCED_GRAPHICS OFF CACHE BOOL "" FORCE)
+    set(CNA_ENGINE_WITH_ENHANCED_GRAPHICS ON  CACHE BOOL "" FORCE)
     set(CNA_ENGINE_INSTALL                OFF CACHE BOOL "" FORCE)
     set(CNA_ENGINE_PILOT_PROBES           OFF CACHE BOOL "" FORCE)
     set(CNA_ENGINE_WARNINGS_AS_ERRORS     OFF CACHE BOOL "" FORCE)
@@ -129,7 +130,7 @@ if(SCHOOL_BUILD_APP)
 
     add_library(school_app STATIC ${SCHOOL_APP_SOURCES})
     target_include_directories(school_app PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")
-    target_link_libraries(school_app PUBLIC school_sim CNA CnaEngine::Graphics)
+    target_link_libraries(school_app PUBLIC school_sim CNA CnaEngine::Graphics CnaEngine::EnhancedGraphics CnaEngine::UI)
 
     # CNA's and sharp-runtime's public headers are not warning-clean under -Wextra/-Wpedantic,
     # so their include directories are passed as -isystem.
