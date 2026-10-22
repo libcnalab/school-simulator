@@ -35,6 +35,7 @@ void PlayerController::SetMouseCaptured(bool captured, int windowWidth, int wind
         try {
             Mouse::setIsRelativeMouseModeEXTProperty(true);
             relativeMode_ = Mouse::getIsRelativeMouseModeEXTProperty();
+            skipRelativeRead_ = relativeMode_;
         } catch (const std::exception& e) {
             relativeMode_ = false;
             School::Log("input", "relative mouse mode unavailable (%s); re-centring the cursor instead", e.what());
@@ -61,7 +62,11 @@ void PlayerController::Update(float dt, FirstPersonCamera& camera, const Collisi
         const MouseState& now = input.Mouse();
         float dx;
         float dy;
-        if (relativeMode_) {
+        if (relativeMode_ && skipRelativeRead_) {
+            // Read as a motion, the pointer's position turned the view by up to 90 degrees on every resume.
+            skipRelativeRead_ = false;
+            dx = dy = 0.0f;
+        } else if (relativeMode_) {
             // In relative mode CNA reports the motion since the last read in X/Y (consume-on-read), not a position.
             dx = static_cast<float>(now.getXProperty());
             dy = static_cast<float>(now.getYProperty());

@@ -76,6 +76,8 @@ private:
     bool flying_ = false;
     bool captured_ = false;
     bool relativeMode_ = false;
+    // The first read after switching relative mode on still reports where the pointer was, not a motion.
+    bool skipRelativeRead_ = false;
     bool pointerUnavailable_ = false;   // the platform cannot re-centre the pointer (no window): mouse look off
     int verifyFrames_ = 0, verifiedFrames_ = 0;
     int centreX_ = 0;
