@@ -14,9 +14,11 @@ struct SchoolOptions {
     bool vsync = true;
     float mouseSensitivity = 0.0025f;   // radians per pixel
     float volume = 1.0f;
+    bool volumeGiven = false;           // --volume (wins over the saved settings)
     bool audio = true;
     bool hud = true;
     bool shadows = true;                // the sun's shadows outdoors (where the device can sample a shadow map)
+    bool shadowsGiven = false;          // --no-shadows (wins over the saved settings)
     int maxFrames = 0;                  // 0 = run until the user quits
     std::string screenshotPath;         // written after `screenshotFrame`, then exits
     int screenshotFrame = 10;

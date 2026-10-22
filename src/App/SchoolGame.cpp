@@ -6,6 +6,8 @@
 #include <cstdio>
 #include <cstring>
 #include <exception>
+#include <fstream>
+#include <iterator>
 #include <sstream>
 
 #include "App/Log.hpp"
@@ -115,7 +117,8 @@ void SchoolGame::BindControls()
     actions_.announce = action("Announcement", {key(Keys::P)});
     actions_.weather = action("Weather", {key(Keys::O)});
     actions_.quit = action("Quit", {key(Keys::Q)});              // while paused
-    actions_.resume = action("Resume", {leftClick});             // while paused
+    // Arrows, Enter or Space, Escape or Backspace, and the pad's d-pad, A and B, in the pause menu.
+    menuActions_ = CnaEngine::UI::MenuActions::Declare(controls_);
     actions_.use = action("Use", {key(Keys::E), leftClick, Binding::ForButton(Buttons::A)});
 }
 
@@ -245,6 +248,11 @@ void SchoolGame::LoadContent()
         camera_.SetPose(camera_.Position(), MathHelper::ToRadians(options_.startYawDegrees.value_or(MathHelper::ToDegrees(camera_.Yaw()))),
                         MathHelper::ToRadians(options_.startPitchDegrees.value_or(0.0f)));
     lastPhase_ = sim_->PhaseIndex();
+    painter_ = std::make_unique<CnaEngine::UI::Painter>(getGraphicsDeviceProperty());
+    if (font_) menuFont_ = std::make_unique<CnaEngine::UI::SpriteFontText>(*font_);
+    else menuFont_ = std::make_unique<CnaEngine::UI::BuiltInFont>(getGraphicsDeviceProperty());
+    LoadPreferences();
+    BuildPauseMenu();
     SetPaused(false);
     hud_->Toast("Welcome to the school. F1 shows the controls.", 5.0f);
     if (!options_.script.empty()) {
@@ -264,6 +272,12 @@ void SchoolGame::UnloadContent()
     screens_.reset();
     weather_.reset();
     npcs_.reset();
+    rebind_.reset();
+    menus_.Clear();
+    settingsMenu_.reset();
+    pauseMenu_.reset();
+    menuFont_.reset();
+    painter_.reset();
     shadowMap_.reset();
     world_.reset();
     sky_.reset();
@@ -345,7 +359,113 @@ bool SchoolGame::GoToRoom(const std::string& key)
 void SchoolGame::SetPaused(bool paused)
 {
     paused_ = paused;
+    if (!pauseMenu_) {
+        // still loading
+    } else if (!paused) {
+        menus_.Clear();
+    } else if (menus_.Empty()) {
+        pauseMenu_->Select(0);
+        menus_.Push(pauseMenu_);
+    }
     ApplyMouseMode();
+}
+
+void SchoolGame::BuildPauseMenu()
+{
+    pauseMenu_ = std::make_shared<CnaEngine::UI::Menu>("PAUSED");
+    pauseMenu_->Button("Resume", [this] { SetPaused(false); });
+    pauseMenu_->Button("Back to the entrance", [this] {
+        ResetToEntrance();
+        hud_->Toast("Back at the entrance");
+        SetPaused(false);
+    });
+    pauseMenu_->Button("Settings", [this] { menus_.Push(BuildSettingsMenu()); });
+#ifndef __EMSCRIPTEN__
+    // A page in a browser has nothing to quit to.
+    pauseMenu_->Button("Quit", [this] { Exit(); });
+#endif
+}
+
+std::shared_ptr<CnaEngine::UI::Menu> SchoolGame::BuildSettingsMenu()
+{
+    // Built when opened: the keys change volume, mute and sensitivity too.
+    settingsMenu_ = std::make_shared<CnaEngine::UI::Menu>("SETTINGS");
+    CnaEngine::UI::Menu& m = *settingsMenu_;
+    m.Label("Sound");
+    m.Slider("Volume", 0.0f, 1.0f, 0.1f, audio_->MasterVolume(), [this](float v) { audio_->SetMasterVolume(v); });
+    m.Choice("Mute", {"Off", "On"}, audio_->Muted() ? 1 : 0, [this](int c) { audio_->SetMuted(c == 1); });
+    m.Label("View");
+    m.Slider("Mouse sensitivity", 0.2f, 4.0f, 0.1f, sensitivityScale_, [this](float v) { sensitivityScale_ = v; });
+    if (shadowMap_) m.Choice("Sun shadows", {"Off", "On"}, options_.shadows ? 1 : 0, [this](int c) { options_.shadows = c == 1; });
+    else m.Label("Sun shadows: not on this device");
+    m.Label("Keys");
+    rebind_ = std::make_unique<CnaEngine::UI::RebindRows>(m, controls_,
+                                                          std::vector<CnaEngine::Input::ActionId>{actions_.use, actions_.map, actions_.minimap,
+                                                                                                  actions_.help, actions_.screenshot});
+    m.Button("Back", [this] { menus_.Pop(); });
+    return settingsMenu_;
+}
+
+void SchoolGame::UpdateMenus()
+{
+    if (rebind_ && menus_.Top() == settingsMenu_.get() && rebind_->Listening()) {
+        (void)rebind_->Update(input_.Snapshot());   // the next key becomes the binding
+        return;
+    }
+    const bool inSettings = settingsMenu_ && menus_.Top() == settingsMenu_.get();
+    const auto& mouse = input_.Snapshot().mouse;
+    const Vector2 pointer = painter_->ToVirtual(Vector2(static_cast<float>(mouse.getXProperty()), static_cast<float>(mouse.getYProperty())));
+    menus_.Update(CnaEngine::UI::ReadMenuInput(controls_, menuActions_, pointer, input_.LeftClicked()));
+    // Leaving the settings, by Back or Escape, keeps them.
+    if (inSettings && menus_.Top() != settingsMenu_.get()) SavePreferences();
+    if (menus_.Empty() && paused_) SetPaused(false);
+}
+
+void SchoolGame::DrawMenus()
+{
+    if (menus_.Empty()) return;
+    painter_->Begin();
+    menus_.Draw(*painter_, *menuFont_, CnaEngine::UI::Anchor::Center, font_ ? 1.0f : 2.0f);
+    painter_->End();
+}
+
+void SchoolGame::LoadPreferences()
+{
+    // Scripted, fixed-step and screenshot runs must not depend on the player's files.
+    if (!options_.script.empty() || !options_.screenshotPath.empty() || options_.maxFrames > 0 || options_.fixedTimeStep > 0.0f) return;
+    preferencesPath_ = CnaEngine::UserConfigPath("cna-school-simulator", "settings.ini");
+    if (preferencesPath_.empty()) return;
+    preferences_ = CnaEngine::SettingsFile::Load(preferencesPath_);
+    for (const auto& problem : preferences_.Problems())
+        School::Log("settings", "%s:%d: %s", preferencesPath_.string().c_str(), problem.line, problem.message.c_str());
+    if (!options_.volumeGiven) audio_->SetMasterVolume(preferences_.GetFloat("sound.volume", audio_->MasterVolume(), 0.0f, 1.0f));
+    audio_->SetMuted(preferences_.GetBool("sound.muted", audio_->Muted()));
+    sensitivityScale_ = preferences_.GetFloat("mouse.sensitivity_scale", sensitivityScale_, 0.2f, 4.0f);
+    if (!options_.shadowsGiven) options_.shadows = preferences_.GetBool("graphics.shadows", options_.shadows);
+    const auto bindings = preferencesPath_.parent_path() / "bindings.ini";
+    if (std::ifstream stream(bindings, std::ios::binary); stream) {
+        const std::string text((std::istreambuf_iterator<char>(stream)), std::istreambuf_iterator<char>());
+        for (const auto& warning : controls_.LoadBindings(text).warnings) School::Log("settings", "%s: %s", bindings.string().c_str(), warning.c_str());
+    }
+}
+
+void SchoolGame::SavePreferences()
+{
+    if (preferencesPath_.empty()) return;
+    try {
+        preferences_.SetFloat("sound.volume", audio_->MasterVolume(), 2);
+        preferences_.SetBool("sound.muted", audio_->Muted());
+        preferences_.SetFloat("mouse.sensitivity_scale", sensitivityScale_, 2);
+        preferences_.SetBool("graphics.shadows", options_.shadows);
+        preferences_.Save(preferencesPath_);
+        const auto bindings = preferencesPath_.parent_path() / "bindings.ini";
+        std::ofstream stream(bindings, std::ios::binary | std::ios::trunc);
+        stream << controls_.SaveBindings();
+        if (!stream) throw std::runtime_error("cannot write " + bindings.string());
+    } catch (const std::exception& e) {
+        School::Log("settings", "not saved: %s", e.what());
+        hud_->Toast(std::string("Settings not saved: ") + e.what(), 4.0f);
+    }
 }
 
 void SchoolGame::ApplyMouseMode()
@@ -379,7 +499,8 @@ void SchoolGame::Announce()
 
 void SchoolGame::HandleSystemKeys()
 {
-    if (controls_.Pressed(actions_.pause)) {
+    // While paused, Escape belongs to the menu (back, then resume).
+    if (!paused_ && controls_.Pressed(actions_.pause)) {
         if (bigMap_) {
             bigMap_ = false;
             ApplyMouseMode();
@@ -481,10 +602,7 @@ void SchoolGame::HandleSystemKeys()
             hud_->Toast(std::string("Weather: ") + options_.weather, 1.5f);
         }
     }
-    if (paused_) {
-        if (controls_.Pressed(actions_.quit)) Exit();
-        if (controls_.Pressed(actions_.resume)) SetPaused(false);
-    }
+    if (paused_ && controls_.Pressed(actions_.quit)) Exit();
 }
 
 // --- per frame -------------------------------------------------------------------------------------------------------------------
@@ -854,7 +972,13 @@ void SchoolGame::Update(GameTime& gameTime)
     controls_.Update(input_.Snapshot());
     NoteFrameTime("input", updateStart);
     UpdateFrameStats(dt);
-    HandleSystemKeys();
+    const bool wasPaused = paused_;
+    if (paused_ && rebind_ && menus_.Top() == settingsMenu_.get() && rebind_->Listening()) {
+        UpdateMenus();   // a key being rebound does nothing else
+    } else {
+        HandleSystemKeys();
+        if (wasPaused && paused_) UpdateMenus();   // the key that opened the menu does not act in it
+    }
     const bool active = getIsActiveProperty();
     if (wasActive_ && !active && !paused_ && options_.maxFrames == 0 && options_.script.empty()) SetPaused(true);
     wasActive_ = active;
@@ -896,7 +1020,8 @@ void SchoolGame::Update(GameTime& gameTime)
         const std::optional<float> wall = collision_->Raycast(camera_.ViewRay(), 4.0f, player_->Level());
         interaction_.Focus(camera_.ViewRay(), 6.0f, wall.value_or(1e9f));
         focusPrompt_ = interaction_.FocusedPrompt();
-        if (!bigMap_ && controls_.Pressed(actions_.use)) {
+        // The click that resumed from the menu does not also use what is in front of the player.
+        if (!bigMap_ && !wasPaused && controls_.Pressed(actions_.use)) {
             if (interaction_.Activate()) {
                 schoolAudio_->Click();
                 UpdateInteractables();
@@ -1138,9 +1263,6 @@ void SchoolGame::Draw(const GameTime& gameTime)
         }
         hud.bellFlash = bellFlash_;
         hud.rendererName = rendererName_;
-        hud.mouseSensitivityScale = sensitivityScale_;
-        hud.volume = audio_->MasterVolume();
-        hud.audioMuted = audio_->Muted();
         if (showStats_) hud.statsLines = StatsLines();
         if (bannerRoom_ != School::kNone && bannerAge_ < 5.0f) {
             const Room& r = plan_.room(bannerRoom_);
@@ -1179,6 +1301,7 @@ void SchoolGame::Draw(const GameTime& gameTime)
             hud_->End();
         });
     }
+    stage("menus", [&] { DrawMenus(); });
     services_.mainView = nullptr;
     if (options_.hitchMs > 0.0f && haveFrameStart_) {
         const double drawMs = std::chrono::duration<double, std::milli>(Clock::now() - drawStart).count();

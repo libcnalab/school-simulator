@@ -28,9 +28,6 @@ struct HudState {
     std::string fadeText;
     std::vector<std::string> statsLines;
     std::string rendererName;
-    float mouseSensitivityScale = 1.0f;
-    float volume = 1.0f;
-    bool audioMuted = false;
     int population = 0;
     int onCampus = 0;
 };
@@ -63,7 +60,6 @@ private:
         float remaining;
     };
     void DrawCrosshair(bool focused);
-    void DrawPause(const HudState& state);
     void DrawHelp();
     void DrawStats(const HudState& state);
 

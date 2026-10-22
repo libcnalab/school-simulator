@@ -98,29 +98,6 @@ void Hud::DrawHelp()
     }
 }
 
-void Hud::DrawPause(const HudState& state)
-{
-    Rect(0, 0, w_, h_, Color(0, 0, 0, 140));
-    const int panelW = 560, panelH = 330;
-    const int x = (w_ - panelW) / 2, y = (h_ - panelH) / 2;
-    Panel(x, y, panelW, panelH);
-    TextCentred(*s_.titleFont, "PAUSED", static_cast<float>(w_) / 2.0f, static_cast<float>(y) + 18.0f, kGold);
-    char buf[160];
-    float ty = static_cast<float>(y) + 96.0f;
-    const auto line = [&](const std::string& text) {
-        TextCentred(*s_.font, text, static_cast<float>(w_) / 2.0f, ty, kInk);
-        ty += 32.0f;
-    };
-    line("Esc / click   resume");
-    line("R   back to the entrance");
-    std::snprintf(buf, sizeof buf, "[ ]   mouse sensitivity: %.2fx", static_cast<double>(state.mouseSensitivityScale));
-    line(buf);
-    std::snprintf(buf, sizeof buf, "- =   volume: %d%%   (F2 mute: %s)", static_cast<int>(state.volume * 100.0f + 0.5f), state.audioMuted ? "on" : "off");
-    line(buf);
-    line("F1   controls          F11   fullscreen");
-    line("Q   quit");
-}
-
 void Hud::DrawStats(const HudState& state)
 {
     const int lineH = 22;
@@ -198,7 +175,6 @@ void Hud::Draw(const HudState& state)
     }
     if (state.showStats) DrawStats(state);
     if (state.showHelp && !state.paused) DrawHelp();
-    if (state.paused) DrawPause(state);
     if (state.fade > 0.001f) {
         Rect(0, 0, w_, h_, Fade(Color(0, 0, 0, 255), state.fade));
         if (!state.fadeText.empty()) TextCentred(*s_.titleFont, state.fadeText, static_cast<float>(w_) / 2.0f, static_cast<float>(h_) / 2.0f - 30.0f, Fade(kGold, state.fade), 0.8f);

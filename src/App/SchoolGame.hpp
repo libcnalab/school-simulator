@@ -4,6 +4,7 @@
 // Update and Draw orchestrate; every subsystem does its own work.
 
 #include <chrono>
+#include <filesystem>
 #include <memory>
 #include <set>
 #include <string>
@@ -38,8 +39,13 @@
 #include "UI/Minimap.hpp"
 #include "World/SchoolPlan.hpp"
 
+#include "CnaEngine/Core/SettingsFile.hpp"
 #include "CnaEngine/Graphics/ShadowMap.hpp"
 #include "CnaEngine/Input/ActionMap.hpp"
+#include "CnaEngine/UI/Font.hpp"
+#include "CnaEngine/UI/Menu.hpp"
+#include "CnaEngine/UI/Painter.hpp"
+#include "CnaEngine/UI/SettingsMenu.hpp"
 
 class SchoolGame : public Microsoft::Xna::Framework::Game {
 public:
@@ -56,6 +62,14 @@ protected:
 private:
     void HandleSystemKeys();
     void SetPaused(bool paused);
+    // The pause menu and its settings page (cna-engine's UI); the player's choices are kept in settings.ini and
+    // bindings.ini under the user's configuration directory (interactive runs only).
+    void BuildPauseMenu();
+    std::shared_ptr<CnaEngine::UI::Menu> BuildSettingsMenu();
+    void UpdateMenus();
+    void DrawMenus();
+    void LoadPreferences();
+    void SavePreferences();
     void ApplyMouseMode();
     void ResetToEntrance();
     bool GoToRoom(const std::string& codeOrType);
@@ -117,8 +131,16 @@ private:
     struct Actions {
         CnaEngine::Input::ActionId pause, help, stats, fly, debugOverlay, map, minimap, mute, screenshot, fullscreen,
             respawn, mouseFaster, mouseSlower, volumeUp, volumeDown, clockStop, speed1, speed2, speed5, speed10, speed30,
-            clockBack, clockForward, nextPhase, bell, drill, announce, weather, quit, resume, use;
+            clockBack, clockForward, nextPhase, bell, drill, announce, weather, quit, use;
     } actions_{};
+    CnaEngine::UI::MenuActions menuActions_;
+    std::unique_ptr<CnaEngine::UI::Painter> painter_;
+    std::unique_ptr<CnaEngine::UI::IFont> menuFont_;
+    CnaEngine::UI::MenuStack menus_;
+    std::shared_ptr<CnaEngine::UI::Menu> pauseMenu_, settingsMenu_;
+    std::unique_ptr<CnaEngine::UI::RebindRows> rebind_;
+    CnaEngine::SettingsFile preferences_;
+    std::filesystem::path preferencesPath_;
     void BindControls();
     std::string rendererName_;
 

@@ -69,9 +69,15 @@ SchoolOptions SchoolOptions::Parse(int argc, char** argv)
         else if (!std::strcmp(a, "--fullscreen")) o.fullscreen = true;
         else if (!std::strcmp(a, "--no-vsync")) o.vsync = false;
         else if (!std::strcmp(a, "--no-hud")) o.hud = false;
-        else if (!std::strcmp(a, "--no-shadows")) o.shadows = false;
+        else if (!std::strcmp(a, "--no-shadows")) {
+            o.shadows = false;
+            o.shadowsGiven = true;
+        }
         else if (Match(a, "--sensitivity", v, i, argc, argv)) o.mouseSensitivity = 0.0025f * static_cast<float>(std::atof(v));
-        else if (Match(a, "--volume", v, i, argc, argv)) o.volume = static_cast<float>(std::atof(v));
+        else if (Match(a, "--volume", v, i, argc, argv)) {
+            o.volume = static_cast<float>(std::atof(v));
+            o.volumeGiven = true;
+        }
         else if (!std::strcmp(a, "--no-audio")) o.audio = false;
         else if (Match(a, "--preset", v, i, argc, argv)) o.preset = v;
         else if (Match(a, "--students", v, i, argc, argv)) o.students = std::atoi(v);

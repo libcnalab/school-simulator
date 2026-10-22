@@ -71,6 +71,10 @@ Controls: `W A S D` walk, mouse look, `Shift` run, `E` / click use, `Esc` pause,
 Elevators: `E` on the call button beside the door, step in, `E` on the panel's up or down button. Light switches
 beside the doors inside rooms switch a room's lights off, on, or back to automatic (they follow occupancy and daylight).
 Look at a person to see who they are and where they are going; `E` tells you more.
+`Esc` opens the pause menu (resume, back to the entrance, settings, quit; arrows, Enter or the mouse). Settings holds the
+volume, mute, mouse sensitivity, the sun's shadows and the keys for use, map, minimap, help and screenshots; they are kept
+in `~/.config/cna-school-simulator/settings.ini` and `bindings.ini` (`$XDG_CONFIG_HOME` when set). Scripted, fixed-step
+and screenshot runs neither read nor write them; `--volume` and `--no-shadows` win over them.
 A gamepad works too (left stick walk, right stick look, A use, Start pause, Y map).
 
 On a Wayland desktop with a CNA older than 2026-10-14 the window cannot be centred and the game refuses to start;

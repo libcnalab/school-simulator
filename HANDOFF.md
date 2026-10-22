@@ -61,6 +61,7 @@ were byte-identical to the step before, on Mesa llvmpipe and on the Radeon 780M 
 | texture cache | `AssetRegistry` |
 | mip chains (branch `engine-shared`, SHARE-001) | `Graphics::Image`, `UploadTexture`; `ImageUtil` removed (checked on llvmpipe; cna-engine's image probe compares a frozen copy of it level by level) |
 | sun shadows (branch `engine-shadows-menu`, 2026-10-22) | `ShadowMap`, `Enhanced::CalibrateShadowMap`, `ApplyShadowReception`, `Material::bakedKeyLight` |
+| pause menu and settings (same branch) | `UI::Menu`, `MenuStack`, `MenuActions`, `RebindRows`, `Painter`, `SpriteFontText`; `SettingsFile`, `UserConfigPath` |
 
 **Sun shadows.** Outdoor meshes (the facade and the outdoor places) keep their normals (`StaticMesh` in cna-engine's
 `PositionNormalColorTexture` layout) and give the sun a share of their baked light: `0.4 x daylight`, less under clouds,
@@ -71,6 +72,13 @@ the facade and people do not cast. With `--no-shadows`, at night and on devices 
 draws exactly as before (checked pixel for pixel). Mesa's llvmpipe drew thin stripes on the ground (which shadows
 itself) until an extra bias of 0.001 (about 10 cm). On the Radeon 780M the views indoors change only where a window
 shows the outside.
+
+**Pause menu.** Escape opens cna-engine's menu in the game's own font (the HUD's key list on the pause panel is gone):
+Resume, Back to the entrance, Settings (volume, mute, mouse sensitivity, sun shadows, five rebindable keys), Quit. While
+paused, Escape belongs to the menu (back, then resume) and Q still quits. Settings are saved when the page closes and
+read at start by interactive runs only. Real X11 input on a private Xvfb checked opening, the settings page, Escape back
+and resume, Quit, a click on Resume and a rebinding (the saved files). The same check found that every resume turned the
+view by up to 90 degrees (the first relative mouse read is the pointer's position): fixed in `PlayerController`.
 
 Not moved: walking and looking (`PlayerController` reads analog sticks and relative mouse motion itself), people, sky,
 weather, particles, screens, audio, the F3 frame-rate average (a half-second block average, also shown on the IT-room
