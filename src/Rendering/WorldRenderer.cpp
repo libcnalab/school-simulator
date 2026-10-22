@@ -41,7 +41,7 @@ WorldRenderer::WorldRenderer(Services& services, const School::SchoolPlan& plan,
         sun.color = Vector3(1, 0.98f, 0.95f);
         sun.intensity = 0.55f;
         sun.radius = 5000.0f;
-        Upload(set, {sun}, Vector3(0.62f, 0.62f, 0.62f), c.opaque, c.transparent, c.bounds, tris);
+        Upload(set, {sun}, Vector3(0.62f, 0.62f, 0.62f), true, c.opaque, c.transparent, c.bounds, tris);
         facade_.push_back(std::move(c));
     }
     // Every outdoor lamp post, for the night glow.
@@ -166,11 +166,12 @@ BoundingBox WorldRenderer::RoomBounds(RoomId id) const
     return BoundingBox(Vector3(r.rect.x0, y0 - 0.1f, r.rect.z0), Vector3(r.rect.x1, y0 + h, r.rect.z1));
 }
 
-void WorldRenderer::Upload(const MeshSet& set, const std::vector<BakedLight>& lights, const Vector3& ambient, std::vector<Batch>& opaque, std::vector<Batch>& transparent,
-                           BoundingBox& bounds, int& triangles)
+void WorldRenderer::Upload(const MeshSet& set, const std::vector<BakedLight>& lights, const Vector3& ambient, bool outdoor, std::vector<Batch>& opaque,
+                           std::vector<Batch>& transparent, BoundingBox& bounds, int& triangles)
 {
     bool first = true;
-    const auto upload = [&](const std::map<std::string, MeshSet::Group>& groups, std::vector<Batch>& out) {
+    std::vector<Vector3> normals;
+    const auto upload = [&](const std::map<std::string, MeshSet::Group>& groups, std::vector<Batch>& out, bool withNormals) {
         for (const auto& [texture, builders] : groups) {
             for (const MeshBuilder& b : builders) {
                 if (b.Empty()) continue;
@@ -179,14 +180,20 @@ void WorldRenderer::Upload(const MeshSet& set, const std::vector<BakedLight>& li
                 const BoundingBox bb = b.Bounds();
                 bounds = first ? bb : BoundingBox::CreateMerged(bounds, bb);
                 first = false;
-                batch.mesh = std::make_unique<StaticMesh>(*s_.device, b.Bake(lights, ambient), b.Indices(), bb);
+                if (withNormals) {
+                    normals.clear();
+                    for (const MeshBuilder::Vertex& v : b.Vertices()) normals.push_back(v.normal);
+                    batch.mesh = std::make_unique<StaticMesh>(*s_.device, b.Bake(lights, ambient), normals, b.Indices(), bb);
+                } else {
+                    batch.mesh = std::make_unique<StaticMesh>(*s_.device, b.Bake(lights, ambient), b.Indices(), bb);
+                }
                 triangles += batch.mesh->TriangleCount();
                 out.push_back(std::move(batch));
             }
         }
     };
-    upload(set.OpaqueMeshes(), opaque);
-    upload(set.TransparentMeshes(), transparent);
+    upload(set.OpaqueMeshes(), opaque, outdoor);
+    upload(set.TransparentMeshes(), transparent, false);
     if (first) bounds = BoundingBox(Vector3::Zero, Vector3::Zero);
 }
 
@@ -205,7 +212,7 @@ void WorldRenderer::BuildGroup(int group)
     auto lead = std::make_unique<LoadedRoom>();
     lead->id = members.front();
     lead->group = group;
-    Upload(merged.meshes, merged.lights, merged.ambient, lead->opaque, lead->transparent, lead->bounds, lead->triangles);
+    Upload(merged.meshes, merged.lights, merged.ambient, false, lead->opaque, lead->transparent, lead->bounds, lead->triangles);
     for (const RoomId m : members) lead->bounds = BoundingBox::CreateMerged(lead->bounds, RoomBounds(m));
     for (std::size_t i = 1; i < members.size(); ++i) {
         auto follower = std::make_unique<LoadedRoom>();
@@ -233,7 +240,7 @@ void WorldRenderer::Build(RoomId id)
     lr->id = id;
     const RoomGeometry g = BuildRoomGeometry(plan_, layouts_, id);
     lr->outdoor = g.outdoor;
-    Upload(g.meshes, g.lights, g.ambient, lr->opaque, lr->transparent, lr->bounds, lr->triangles);
+    Upload(g.meshes, g.lights, g.ambient, g.outdoor, lr->opaque, lr->transparent, lr->bounds, lr->triangles);
     // The visual bounds include the full room volume so the frustum test never drops a room whose geometry is thin.
     lr->bounds = BoundingBox::CreateMerged(lr->bounds, RoomBounds(id));
     rooms_[id] = std::move(lr);
@@ -328,7 +335,7 @@ void WorldRenderer::Update(const Vector3& eye, int level, float dt, const std::v
     stats_.roomsLoaded = static_cast<int>(rooms_.size());
 }
 
-void WorldRenderer::Submit(const std::vector<Batch>& batches, const Vector3& tint, bool transparent)
+void WorldRenderer::Submit(const std::vector<Batch>& batches, const Vector3& tint, bool transparent, float sunShare)
 {
     // The world effect's look through the engine's stock binder: unlit, vertex colours times texture times `tint`.
     // Opaque geometry is wound counter-clockwise (culled clockwise) and sampled anisotropically; glass is
@@ -341,6 +348,7 @@ void WorldRenderer::Submit(const std::vector<Batch>& batches, const Vector3& tin
         m.vertexColors = true;
         m.baseTexture = b.texture;
         m.diffuseColor = tint;
+        if (b.mesh->HasNormals()) m.bakedKeyLight = sunShare;
         if (transparent) {
             m.blend = BlendMode::AlphaBlend;
             m.straightAlpha = true;
@@ -432,7 +440,7 @@ void WorldRenderer::Draw(const DrawContext& ctx, const WorldLighting& light, con
 
     // Outdoors first (facade, ground, zones), tinted by the daylight.
     for (const Chunk& c : facade_)
-        if (ctx.view.frustum.Intersects(c.bounds)) Submit(c.opaque, light.outdoorTint, false);
+        if (ctx.view.frustum.Intersects(c.bounds)) Submit(c.opaque, light.outdoorTint, false, light.sunShare);
     std::vector<const LoadedRoom*> visible;
     std::vector<char> portal;
     const bool portalValid = portalCulling && ComputePortalVisibility(ctx, doors, portal);
@@ -452,7 +460,7 @@ void WorldRenderer::Draw(const DrawContext& ctx, const WorldLighting& light, con
     }
     for (const LoadedRoom* lr : visible)
         if (lr->outdoor) {
-            Submit(lr->opaque, light.outdoorTint, false);
+            Submit(lr->opaque, light.outdoorTint, false, light.sunShare);
             ++stats_.roomsDrawn;
         }
     // Indoors: the baked lights are the room's own; a room whose lights are off keeps only the daylight from its windows.
@@ -503,12 +511,35 @@ void WorldRenderer::Draw(const DrawContext& ctx, const WorldLighting& light, con
     lighting.fogColor = fx.getFogColorProperty();
     lighting.fogStart = fx.getFogStartProperty();
     lighting.fogEnd = fx.getFogEndProperty();
+    // The sun, for the outdoor surfaces' share of it.
+    lighting.defaultLighting = false;
+    lighting.lightDirection = light.sunDirection;
     queue_.Sort(ctx.view.eye);
     CnaEngine::Graphics::RenderStatistics drawn;
     renderer_->Render(queue_, camera, &drawn);
     stats_.drawCalls += static_cast<int>(drawn.drawCalls);
     stats_.trianglesDrawn += static_cast<int>(drawn.primitives);
     fx.setDiffuseColorProperty(Vector3(1, 1, 1));
+}
+
+void WorldRenderer::RenderShadows(CnaEngine::Graphics::ShadowMap& map, const Vector3& towardsSun, const Vector3& focus, float radius)
+{
+    using namespace CnaEngine::Graphics;
+    casters_.clear();
+    const auto cast = [&](const std::vector<Batch>& batches) {
+        for (const Batch& b : batches) {
+            RenderItem item;
+            item.mesh = &b.mesh->Gpu();
+            item.material = &casterMaterial_;
+            item.bounds = BoundingSphere::CreateFromBoundingBox(b.mesh->Bounds());
+            casters_.push_back(item);
+        }
+    };
+    for (const Chunk& c : facade_) cast(c.opaque);
+    for (const auto& [id, lr] : rooms_)
+        if (lr->outdoor) cast(lr->opaque);
+    map.Fit(towardsSun, focus, radius);
+    map.Render(*s_.device, casters_);   // only the casters whose bounds reach the map are drawn
 }
 
 void WorldRenderer::DrawDoors(const DrawContext& ctx, const WorldLighting& light, const std::vector<School::DoorRuntime>& doors)

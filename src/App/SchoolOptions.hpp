@@ -16,6 +16,7 @@ struct SchoolOptions {
     float volume = 1.0f;
     bool audio = true;
     bool hud = true;
+    bool shadows = true;                // the sun's shadows outdoors (where the device can sample a shadow map)
     int maxFrames = 0;                  // 0 = run until the user quits
     std::string screenshotPath;         // written after `screenshotFrame`, then exits
     int screenshotFrame = 10;

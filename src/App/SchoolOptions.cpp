@@ -37,6 +37,7 @@ const char* SchoolOptions::Usage()
         "cna-school-simulator [options]\n"
         "  --width N --height N      window size (default 1280x720)      --fullscreen   start fullscreen\n"
         "  --no-vsync                disable vertical sync                --no-hud       draw only the 3D scene\n"
+        "  --no-shadows              no sun shadows outdoors\n"
         "  --sensitivity F           mouse sensitivity multiplier (default 1.0)\n"
         "  --volume F                master volume 0..1                  --no-audio     no sound at all\n"
         "  --preset NAME             population: empty, light, normal, busy, extreme (default busy: 1000 students)\n"
@@ -68,6 +69,7 @@ SchoolOptions SchoolOptions::Parse(int argc, char** argv)
         else if (!std::strcmp(a, "--fullscreen")) o.fullscreen = true;
         else if (!std::strcmp(a, "--no-vsync")) o.vsync = false;
         else if (!std::strcmp(a, "--no-hud")) o.hud = false;
+        else if (!std::strcmp(a, "--no-shadows")) o.shadows = false;
         else if (Match(a, "--sensitivity", v, i, argc, argv)) o.mouseSensitivity = 0.0025f * static_cast<float>(std::atof(v));
         else if (Match(a, "--volume", v, i, argc, argv)) o.volume = static_cast<float>(std::atof(v));
         else if (!std::strcmp(a, "--no-audio")) o.audio = false;

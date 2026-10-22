@@ -38,6 +38,7 @@
 #include "UI/Minimap.hpp"
 #include "World/SchoolPlan.hpp"
 
+#include "CnaEngine/Graphics/ShadowMap.hpp"
 #include "CnaEngine/Input/ActionMap.hpp"
 
 class SchoolGame : public Microsoft::Xna::Framework::Game {
@@ -94,6 +95,8 @@ private:
     TimeOfDay timeOfDay_;
     std::unique_ptr<SkyDome> sky_;
     std::unique_ptr<WorldRenderer> world_;
+    // The sun's shadow map (cna-engine), on devices that can sample one.
+    std::unique_ptr<CnaEngine::Graphics::ShadowMap> shadowMap_;
     std::unique_ptr<NpcRenderer> npcs_;
     std::unique_ptr<Weather> weather_;
     std::unique_ptr<Screens> screens_;

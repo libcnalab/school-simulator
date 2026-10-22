@@ -10,6 +10,7 @@
 
 #include "App/Log.hpp"
 #include "CNA/GraphicsCapability.hpp"
+#include "CnaEngine/Enhanced/ShadowReception.hpp"
 #include "CnaEngine/Graphics/ScreenCapture.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Graphics/ClearOptions.hpp"
@@ -206,6 +207,12 @@ void SchoolGame::LoadContent()
     services_.timeOfDay = &timeOfDay_;
     world_ = std::make_unique<WorldRenderer>(services_, plan_, *layouts_);
     world_->buildTimeBudget = options_.fixedTimeStep <= 0.0f;
+    if (getGraphicsDeviceProperty().SupportsShadowSamplingEXT()) {
+        shadowMap_ = std::make_unique<CnaEngine::Graphics::ShadowMap>(getGraphicsDeviceProperty(), 2048);
+        CnaEngine::Enhanced::CalibrateShadowMap(getGraphicsDeviceProperty(), *shadowMap_);
+        School::Log("shadows", "sun shadow map %dx%d, %d bits of depth%s", shadowMap_->Size(), shadowMap_->Size(), shadowMap_->PrecisionBits(),
+                    shadowMap_->DrawnUpsideDown() ? ", drawn upside down" : "");
+    }
     npcs_ = std::make_unique<NpcRenderer>(services_);
     weather_ = std::make_unique<Weather>(services_);
     weather_->SetKind(options_.weather);
@@ -257,6 +264,7 @@ void SchoolGame::UnloadContent()
     screens_.reset();
     weather_.reset();
     npcs_.reset();
+    shadowMap_.reset();
     world_.reset();
     sky_.reset();
     schoolAudio_.reset();
@@ -1078,6 +1086,21 @@ void SchoolGame::Draw(const GameTime& gameTime)
             device.SetRenderTarget(nullptr);
         }
     };
+    // The sun's share of the outdoor light: what its shadows take away. Weaker under clouds, none at night. The map is drawn
+    // first: drawing into it leaves the back buffer undefined.
+    const float sunShare = 0.4f * day * (1.0f - 0.7f * overcast);
+    const bool shadowed = options_.shadows && shadowMap_ && sunShare > 0.02f;
+    if (shadowed) {
+        stage("shadows", [&] {
+            // Centred ahead of the eye, so more of the map falls where the player looks.
+            const Vector3 focus = camera_.Position() + camera_.GroundForward() * 25.0f;
+            world_->RenderShadows(*shadowMap_, timeOfDay_.SunDirection(), focus, 55.0f);
+        });
+    }
+    // The ground casts onto itself: Mesa's llvmpipe drew thin stripes along its triangle edges below this extra bias (about
+    // 10 cm over this map), which still keeps a bench's shadow at its feet.
+    CnaEngine::Enhanced::ApplyShadowReception(world_->Renderer(), shadowed ? shadowMap_.get() : nullptr, {.filterRadius = 1, .extraBias = 0.001f});
+    light.sunShare = shadowed ? sunShare : 0.0f;
     stage("offscreen", [&] { screens_->RenderOffscreen(device, *effects_, *sky_, *world_, *npcs_, *sim_, light, time_); });
     device.SetRenderTarget(nullptr);
     effects_->SetCamera(view.view, view.projection);

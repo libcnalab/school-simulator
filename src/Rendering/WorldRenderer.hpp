@@ -22,6 +22,7 @@
 #include "CnaEngine/Graphics/ForwardRenderer.hpp"
 #include "CnaEngine/Graphics/Material.hpp"
 #include "CnaEngine/Graphics/RenderQueue.hpp"
+#include "CnaEngine/Graphics/ShadowMap.hpp"
 
 struct WorldStats {
     int roomsLoaded = 0;
@@ -40,6 +41,9 @@ struct WorldLighting {
     Microsoft::Xna::Framework::Vector3 outdoorTint{1, 1, 1};   // multiplies baked outdoor colours
     Microsoft::Xna::Framework::Vector3 sunDirection{0, -1, 0}; // towards the scene (for lit door leaves)
     float daylight = 1.0f;
+    /** The sun's share of the baked outdoor light, 0..1: outdoor surfaces keep (1 - share) and get the share back as the sun
+     *  reaches them (N.L, the shadow map). 0 draws them as baked. */
+    float sunShare = 0.0f;
     /** Per room: 1 = lights on, 0 = dark (only the daylight through the windows). Empty = everything lit. */
     const std::vector<float>* roomLight = nullptr;
 };
@@ -68,6 +72,13 @@ public:
     void Ensure(School::RoomId room);
     /** Drops every room (a renderer or texture change). */
     void Clear();
+
+    /** Draws the sun's shadow map around `focus`: the facade and the loaded outdoor places cast (every room is inside the
+     *  facade). `towardsSun` points at the sun. */
+    void RenderShadows(CnaEngine::Graphics::ShadowMap& map, const Microsoft::Xna::Framework::Vector3& towardsSun,
+                       const Microsoft::Xna::Framework::Vector3& focus, float radius);
+    /** The renderer whose effects receive the shadow map (Enhanced::ApplyShadowReception). */
+    [[nodiscard]] CnaEngine::Graphics::ForwardRenderer& Renderer() { return *renderer_; }
 
     /** Visual bounds of a room (floor to ceiling). */
     [[nodiscard]] Microsoft::Xna::Framework::BoundingBox RoomBounds(School::RoomId room) const;
@@ -107,8 +118,9 @@ private:
         std::vector<Batch> transparent;
     };
 
-    void Upload(const MeshSet& set, const std::vector<BakedLight>& lights, const Microsoft::Xna::Framework::Vector3& ambient, std::vector<Batch>& opaque,
-                std::vector<Batch>& transparent, Microsoft::Xna::Framework::BoundingBox& bounds, int& triangles);
+    /** `outdoor`: the opaque meshes keep their normals, for the sun's share of their light. */
+    void Upload(const MeshSet& set, const std::vector<BakedLight>& lights, const Microsoft::Xna::Framework::Vector3& ambient, bool outdoor,
+                std::vector<Batch>& opaque, std::vector<Batch>& transparent, Microsoft::Xna::Framework::BoundingBox& bounds, int& triangles);
     void Build(School::RoomId room);
     /** Builds every member of a corridor group at once; the first member holds the merged batches. */
     void BuildGroup(int group);
@@ -117,8 +129,9 @@ private:
      *  nearby rooms (a safety margin), and windowed rooms when looking out. False = the eye is in no room: draw all. */
     bool ComputePortalVisibility(const DrawContext& ctx, const std::vector<School::DoorRuntime>& doors, std::vector<char>& seen) const;
     float DistanceTo(const School::Room& room, const Microsoft::Xna::Framework::Vector3& eye) const;
-    /** Queues `batches` as render items, unlit, vertex colours times texture, multiplied by `tint`. */
-    void Submit(const std::vector<Batch>& batches, const Microsoft::Xna::Framework::Vector3& tint, bool transparent);
+    /** Queues `batches` as render items, unlit, vertex colours times texture, multiplied by `tint`; meshes with normals give
+     *  `sunShare` of their light to the sun (WorldLighting::sunShare). */
+    void Submit(const std::vector<Batch>& batches, const Microsoft::Xna::Framework::Vector3& tint, bool transparent, float sunShare = 0.0f);
     void DrawDoors(const DrawContext& ctx, const WorldLighting& light, const std::vector<School::DoorRuntime>& doors);
     void DrawElevators(const DrawContext& ctx, const std::vector<School::ElevatorStatus>& elevators);
     void DrawLamps(const DrawContext& ctx, const WorldLighting& light);
@@ -142,6 +155,8 @@ private:
     WorldStats stats_;
     std::unique_ptr<CnaEngine::Graphics::ForwardRenderer> renderer_;
     CnaEngine::Graphics::RenderQueue queue_;
+    std::vector<CnaEngine::Graphics::RenderItem> casters_;
+    CnaEngine::Graphics::Material casterMaterial_;
     std::deque<CnaEngine::Graphics::Material> frameMaterials_;   // this draw's materials; a deque keeps their addresses
     std::int32_t nextOrder_ = 0;
     Microsoft::Xna::Framework::Vector3 lastEye_;
